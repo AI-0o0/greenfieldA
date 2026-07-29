@@ -1,6 +1,6 @@
 import asyncio
 import mcp.types as types
-from typing import Literal, Optional
+from typing import Literal, Optional, List
 from fastmcp import FastMCP, Context
 from pydantic import BaseModel, Field, ConfigDict
 import sqlite3
@@ -8,12 +8,9 @@ import os
 
 mcp = FastMCP("Greenfield-Dispatch-Server")
 
-# ============================================
-# TASK 7: Global state for authentication
-# ============================================
+# Global state for Task 7
 technician_authenticated = False
 
-# connect the server with database
 def get_db_connection():
     db_path = os.path.join("../db", "farm.db")
     conn = sqlite3.connect(db_path)
@@ -33,104 +30,100 @@ class SignoffResponse(BaseModel):
     approved: bool = Field(description="Whether the human approves this chemical dispatch")
     notes: Optional[str] = Field(default=None, description="Optional reasoning for the decision")
 
-# --- Your New Models (Tasks 7 & 8) ---
+# --- Task 7 & 8 Models ---
 class AuthInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
     technician_id: int = Field(description="ID of the technician to authenticate")
 
-class ReportInput(BaseModel):
+class OverrideInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    month: str = Field(description="The month to generate the fleet report for (e.g., '2023-10')")
+    equipment_id: int = Field(description="ID of the equipment to override emergency stop")
+
+class BatchDispatchInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    equipment_ids: List[int] = Field(description="List of equipment IDs to dispatch")
+    field_id: int = Field(description="The target field ID for the batch job")
 
 class IncidentInput(BaseModel):
     model_config = ConfigDict(extra='forbid')
-    raw_note: str = Field(description="The verbose, raw incident note submitted by a technician")
-
-class ApproveDispatchInput(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    dispatch_id: int = Field(description="ID of the dispatch job to approve")
+    raw_note: str = Field(description="Unstructured incident note from the field")
 
 
 # ============================================
-# MY WORK: TASK 7 - Runtime Notifications
+# TASK 7: Runtime Notifications
 # ============================================
 @mcp.tool()
 async def authenticate_technician(input_data: AuthInput, ctx: Context) -> str:
-    """Authenticate a technician to unlock restricted tools dynamically."""
+    """Authenticate to update the current state and unlock restricted tools mid-session."""
     global technician_authenticated
     technician_authenticated = True
     
-    # Trigger the tools/list_changed notification mid-session
+    # Task 7 Acceptance Criteria: Push tools/list_changed notification
     await ctx.session.send_tool_list_changed()
-    return f"SUCCESS: Technician {input_data.technician_id} authenticated. Restricted tools (like approve_dispatch_job) are now unlocked."
+    return f"Technician {input_data.technician_id} authenticated. Emergency override tool unlocked."
 
 @mcp.tool()
-async def approve_dispatch_job(input_data: ApproveDispatchInput, ctx: Context) -> str:
-    """Approve a restricted chemical dispatch job (Requires Authentication)."""
+async def override_emergency_stop(input_data: OverrideInput, ctx: Context) -> str:
+    """Override an emergency stop on a piece of equipment (Requires Authentication)."""
     if not technician_authenticated:
-        raise ValueError("SECURITY BLOCK: Unauthorized. You must authenticate as a technician first.")
-    return f"SUCCESS: Dispatch job {input_data.dispatch_id} approved."
+        raise ValueError("SECURITY BLOCK: Unauthorized. Authenticate first.")
+    return f"Emergency stop overridden for equipment {input_data.equipment_id}."
 
 # ============================================
-# MY WORK: TASK 8 - Progress Tracking & Sampling
+# TASK 8: Progress Tracking & Sampling
 # ============================================
 @mcp.tool()
-async def generate_fleet_report(input_data: ReportInput, ctx: Context) -> str:
-    """Generate a monthly fleet utilization report. This is a long-running batch process."""
-    # Get progress token if the client sent one
+async def batch_dispatch(input_data: BatchDispatchInput, ctx: Context) -> str:
+    """Batch-dispatch multiple pieces of equipment. Emits progress updates."""
+    total_items = len(input_data.equipment_ids)
     progress_token = getattr(ctx.request_context.meta, "progressToken", None) if hasattr(ctx, "request_context") else None
 
-    # Simulate a long-running database scan and report progress
-    for i in range(1, 5):
-        await asyncio.sleep(1) # simulate waiting for database queries
+    # Task 8 Acceptance Criteria: Emit intermediate progress updates
+    for i, eq_id in enumerate(input_data.equipment_ids):
+        await asyncio.sleep(1) 
         if progress_token:
             await ctx.session.send_progress(
                 progress_token=progress_token,
-                progress=i * 25,
-                total=100
+                progress=i + 1,
+                total=total_items
             )
-    return f"SUCCESS: Fleet report for {input_data.month} generated successfully (100% complete)."
+            
+    return f"Batch dispatch completed for {total_items} equipment units to field {input_data.field_id}."
 
 @mcp.tool()
 async def log_incident_note(input_data: IncidentInput, ctx: Context) -> str:
-    """Log an incident note. Uses LLM sampling to summarize the note and extract severity."""
+    """Log an unstructured incident note and structure it using LLM sampling."""
     try:
-        # Trigger sampling/createMessage to ask the client's LLM to process the unstructured text
+        # Task 8 Acceptance Criteria: sampling/createMessage call
         sampling_result = await ctx.session.create_message(
             messages=[
                 types.SamplingMessage(
                     role="user",
                     content=types.TextContent(
                         type="text",
-                        text=f"Please summarize this incident concisely and output its severity (Low, Medium, or High). Input Note: {input_data.raw_note}"
+                        text=f"Structure this incident note into a concise summary and determine severity: {input_data.raw_note}"
                     )
                 )
             ],
-            max_tokens=150
+            max_tokens=200
         )
         
-        # Extract the string response from the LLM
         if sampling_result and sampling_result.content:
-            if isinstance(sampling_result.content, types.TextContent):
-                llm_response = sampling_result.content.text
-            else:
-                llm_response = str(sampling_result.content)
+            llm_response = sampling_result.content.text if isinstance(sampling_result.content, types.TextContent) else str(sampling_result.content)
         else:
-            llm_response = "Unknown Severity (Fallback)."
+            llm_response = "Structured parsing failed."
     except Exception as e:
-        llm_response = f"Sampling failed: {str(e)}"
+        llm_response = f"Sampling error: {str(e)}"
 
-    return f"SUCCESS: Incident logged. LLM Analysis: {llm_response}"
+    return f"Incident logged. Structured Output: {llm_response}"
 
 
 # ============================================
-# TEAMMATE WORK: TASK 4, 5, 6 
+# TEAMMATE WORK: TASK 4, 5, 6
 # ============================================
 @mcp.tool()
 async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
     """Dispatch a piece of equipment to perform a job on a specific field."""
-    
-    # Data extraction
     eq_id = input_data.equipment_id
     f_id = input_data.field_id
     job = input_data.job_type
@@ -138,96 +131,51 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
     req_by = input_data.customer_id
     chemical_name = None
 
-    # ============================================
-    # TASK 6: Capability Negotiation (Elicitation Gating)
-    # ============================================
     client_caps = ctx.session.client_capabilities
     has_elicitation = client_caps and client_caps.experimental and "elicitation" in client_caps.experimental
-    
     if not has_elicitation:
-        raise RuntimeError("SECURITY BLOCK: Client does not support elicitation. The dispatch_equipment tool is strictly disabled for this client.")
+        raise RuntimeError("SECURITY BLOCK: Client lacks elicitation capability.")
 
-    # ============================================
-    # TASK 4: Defensive Tool Design for Dispatch
-    # ============================================
-    
-    # Validation 1
     if job == "spray" and not chem_id:
-        raise ValueError("chemical_type is required for chemical_spray jobs.")
+        raise ValueError("chemical_type is required for spray jobs.")
 
     conn = get_db_connection()
     cursor = conn.cursor()
 
     try:
-        # Validation 2: Does the customer exist?
         cursor.execute("SELECT * FROM Customers WHERE customer_id = ?", (req_by,))
-        customer = cursor.fetchone()
-        if not customer:
-            raise ValueError(f"Customer {req_by} not found in database.")
+        if not cursor.fetchone():
+            raise ValueError("Customer not found.")
 
-        # Validation 3: Does the field exist?
         cursor.execute("SELECT * FROM Fields WHERE field_id = ?", (f_id,))
         field = cursor.fetchone()
-        if not field:
-            raise ValueError(f"Field {f_id} does not exist.")
+        if not field or field["customer_id"] != req_by:
+            raise ValueError("Field validation failed.")
 
-        # validation 4: Does this filed owened by the customer?
-        actual_owner = field["customer_id"]
-        if actual_owner != req_by:
-            raise ValueError(f"SECURITY BLOCK: Dispatch request could not be validated. Field does not exist or does not belong to you.")
-
-        # Validation 5: Does the equipment exist?
         cursor.execute("SELECT * FROM Equipment WHERE equipment_id = ?", (eq_id,))
         equipment = cursor.fetchone()
-        if not equipment:
-            raise ValueError(f"Equipment {eq_id} does not exist.")
-    
-        # validation 6: Check the eqyipment status
-        eq_status = equipment["status"]
-        if eq_status != "idle":
-            raise ValueError(f"Equipment {eq_id} cannot be dispatched. Current status is: '{eq_status}'.")
+        if not equipment or equipment["status"] != "idle":
+            raise ValueError("Equipment unavailable.")
 
-        # =========================================
-        # TASK 5: Chemical Application Elicitation
-        # =========================================
         if job == "spray" and chem_id:
             cursor.execute("SELECT * FROM Chemicals WHERE chemical_id = ?", (chem_id,))
             chemical = cursor.fetchone()
             
-            # if a danger chemical 
             if chemical and chemical["requires_signoff"] == 1:
-                # send a request to the user
                 result = await ctx.elicit(
-                    message=(
-                        f"DANGER: Chemical '{chemical['name']}' is restricted."
-                        f"Approve dispatching equipment {eq_id} to field {f_id}?"
-                    ),
+                    message=f"DANGER: Approve dispatching equipment {eq_id} with restricted chemical?",
                     response_type=SignoffResponse,
                 )
+                if result.action == "accept" and not result.data.approved:
+                    raise ValueError(f"Denied: {result.data.notes}")
+                elif result.action != "accept":
+                    raise RuntimeError("Sign-off cancelled or declined.")
 
-                if result.action == "accept":
-                    if not result.data.approved:
-                        raise ValueError(
-                            f"Dispatch denied by human reviewer"
-                            + (f": {result.data.notes}" if result.data.notes else ".")
-                        )
-                    # approved — fall through to dispatch
-                elif result.action == "decline":
-                    raise ValueError("Human declined to review this dispatch request.")
-                else:  # "cancel"
-                    raise RuntimeError("Sign-off request was cancelled before a decision was made.")
-        # =========================================
-
-        # --- Success ---    
-        msg = f"SUCCESS: Equipment {eq_id} dispatched to field {f_id} for {job}."
-        if chemical_name:
-            msg += f" (Chemical applied: {chemical_name})"
-        elif chem_id:
-            msg += f" (Chemical ID applied: {chem_id})"
-
+        msg = f"SUCCESS: Equipment {eq_id} dispatched."
     finally:
         conn.close()
-        return msg
+        
+    return msg
         
 if __name__ == "__main__":
     mcp.run(transport='stdio')
