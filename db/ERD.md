@@ -1,0 +1,88 @@
+erDiagram
+
+    CUSTOMERS {
+    int customer_id PK
+    string company_name
+    string phone
+    string email
+    boolean credit_hold
+}
+
+FIELDS {
+    int field_id PK
+    int customer_id FK
+    string field_name
+    string location
+    float area
+}
+
+EQUIPMENT {
+    int equipment_id PK
+    string serial_number
+    string equipment_type
+    string status
+    string current_location
+}
+
+TECHNICIANS {
+    int technician_id PK
+    string full_name
+    string role
+    boolean authenticated
+}
+
+CHEMICALS {
+    int chemical_id PK
+    string name
+    string hazard_class
+    boolean requires_signoff
+}
+
+DISPATCH_JOBS {
+    int dispatch_id PK
+    int equipment_id FK
+    int field_id FK
+    int technician_id FK
+    string job_type
+    int chemical_id FK
+    string status
+    datetime requested_at
+    datetime started_at
+    datetime completed_at
+    string approval_status
+    int approved_by FK
+}
+
+INCIDENT_NOTES {
+    int incident_id PK
+    int equipment_id FK
+    int technician_id FK
+    text raw_note
+    text summarized_note
+    string severity
+    boolean resolved
+    datetime created_at
+}
+
+FLEET_REPORTS {
+    int report_id PK
+    string month
+    string status
+    int progress
+    int generated_by FK
+    datetime created_at
+}
+
+CUSTOMERS ||--o{ FIELDS : owns
+
+FIELDS ||--o{ DISPATCH_JOBS : assigned_to
+EQUIPMENT ||--o{ DISPATCH_JOBS : performs
+CHEMICALS ||--o{ DISPATCH_JOBS : used_in
+
+TECHNICIANS ||--o{ DISPATCH_JOBS : dispatches
+TECHNICIANS ||--o{ DISPATCH_JOBS : approves
+
+EQUIPMENT ||--o{ INCIDENT_NOTES : has
+TECHNICIANS ||--o{ INCIDENT_NOTES : writes
+
+TECHNICIANS ||--o{ FLEET_REPORTS : generates
