@@ -1,16 +1,20 @@
 import asyncio
+from mcp import StdioServerParameters
 from mcp.client.stdio import stdio_client
 from mcp.client.session import ClientSession
 import mcp.types as types
 
 async def run_demo():
-    server_cmd = "python"
-    server_args = ["../mcp_server/server.py"]
+    # Setup server parameters for MCP 2.0.0
+    server_params = StdioServerParameters(
+        command="python",
+        args=["../mcp_server/server.py"]
+    )
 
     print("=== Task 9: End-to-End Agent Demo ===")
     
-    async with stdio_client(server_cmd, server_args) as (read_stream, write_stream):
-        # تفعيل الـ Elicitation المطلوبة في Task 5 و 6
+    async with stdio_client(server_params) as (read_stream, write_stream):
+        # Enable experimental capabilities for Elicitation (Task 5 & 6)
         capabilities = types.ClientCapabilities(
             experimental={"elicitation": {}}
         )
@@ -20,7 +24,7 @@ async def run_demo():
             await session.initialize(capabilities=capabilities)
             print("[+] Handshake complete. Capabilities negotiated.")
 
-            # 2. Testing Task 2 (Resources & Prompts) - تخطي آمن لأنهم مخلصوش
+            # 2. Testing Task 2 (Resources & Prompts) - Safe skip if not implemented yet
             print("\n[+] Testing Task 2 (Resources & Prompts)...")
             try:
                 prompts = await session.list_prompts()
@@ -32,11 +36,11 @@ async def run_demo():
             print("\n[+] Triggering Task 7 (Notifications)...")
             print("  - Processing payment to clear credit hold and unlock dispatch...")
             try:
-                # نفترض أن العميل رقم 1 موجود في الداتابيز
+                # Assuming customer_id 1 exists in the database
                 pay_res = await session.call_tool("process_payment", {"customer_id": 1})
                 print(f"  - Result: {pay_res.content[0].text}")
                 
-                # تحديث قائمة الأدوات بعد الإشعار
+                # Refresh tool list automatically after notification
                 await session.list_tools()
                 print("  - Tool list refreshed automatically after notification.")
             except Exception as e:
