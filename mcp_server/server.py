@@ -52,7 +52,7 @@ class ApproveDispatchInput(BaseModel):
 
 
 # ============================================
-# YOUR WORK: TASK 7 - Runtime Notifications
+# MY WORK: TASK 7 - Runtime Notifications
 # ============================================
 @mcp.tool()
 async def authenticate_technician(input_data: AuthInput, ctx: Context) -> str:
@@ -72,7 +72,7 @@ async def approve_dispatch_job(input_data: ApproveDispatchInput, ctx: Context) -
     return f"SUCCESS: Dispatch job {input_data.dispatch_id} approved."
 
 # ============================================
-# YOUR WORK: TASK 8 - Progress Tracking & Sampling
+# MY WORK: TASK 8 - Progress Tracking & Sampling
 # ============================================
 @mcp.tool()
 async def generate_fleet_report(input_data: ReportInput, ctx: Context) -> str:
