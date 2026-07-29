@@ -47,6 +47,15 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
     chemical_name = None
 
     # ============================================
+    # TASK 6: Capability Negotiation (Elicitation Gating)
+    # ============================================
+    client_caps = ctx.session.client_capabilities
+    has_elicitation = client_caps and client_caps.experimental and "elicitation" in client_caps.experimental
+    
+    if not has_elicitation:
+        raise RuntimeError("SECURITY BLOCK: Client does not support elicitation. The dispatch_equipment tool is strictly disabled for this client.")
+
+    # ============================================
     # TASK 4: Defensive Tool Design for Dispatch
     # ============================================
     
@@ -119,7 +128,6 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
 
         # --- Success ---    
         msg = f"SUCCESS: Equipment {eq_id} dispatched to field {f_id} for {job}."
-        # حل مشكلة الـ NameError اللي كانت هتضرب السيرفر
         if chemical_name:
             msg += f" (Chemical applied: {chemical_name})"
         elif chem_id:
