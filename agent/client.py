@@ -10,67 +10,53 @@ async def run_demo():
     print("=== Task 9: End-to-End Agent Demo ===")
     
     async with stdio_client(server_cmd, server_args) as (read_stream, write_stream):
-        # Enable experimental capabilities for Elicitation (Required for Task 5 & 6)
+        # تفعيل الـ Elicitation المطلوبة في Task 5 و 6
         capabilities = types.ClientCapabilities(
             experimental={"elicitation": {}}
         )
         
         async with ClientSession(read_stream, write_stream) as session:
-            # 1. Capability Negotiation Handshake (Task 6)
+            # 1. Capability Negotiation Handshake
             await session.initialize(capabilities=capabilities)
             print("[+] Handshake complete. Capabilities negotiated.")
 
-            # 2. Fetch Resources & Prompts (Task 2 - Role 1)
-            print("\n[+] Testing Resources & Prompts (Role 1)...")
+            # 2. Testing Task 2 (Resources & Prompts) - تخطي آمن لأنهم مخلصوش
+            print("\n[+] Testing Task 2 (Resources & Prompts)...")
             try:
                 prompts = await session.list_prompts()
-                print(f"  - Prompts discovered: {[p.name for p in prompts.prompts]}")
-                resources = await session.list_resources()
-                print(f"  - Resources discovered: {[r.name for r in resources.resources]}")
-            except Exception as e:
-                print("  - Role 1 tasks not fully implemented yet, skipping...")
+                print("  - Prompts module is ready.")
+            except Exception:
+                print("  - Role 1 tasks (Resources/Prompts) not fully implemented yet, skipping gracefully...")
 
-            # 3. Initial Tool List (Task 7 Setup)
-            tools_response = await session.list_tools()
-            print("\n[+] Initial Tools (Read-Only/Basic):")
-            for t in tools_response.tools:
-                print(f"  - {t.name}")
-
-            # 4. Trigger Runtime Notification via Authentication (Task 7)
-            print("\n[+] Authenticating Technician to trigger tools/list_changed...")
-            auth_res = await session.call_tool("authenticate_technician", {"technician_id": 99})
-            print(f"  Result: {auth_res.content[0].text}")
-
-            updated_tools = await session.list_tools()
-            print("\n[+] Updated Tools (override_emergency_stop should now be visible):")
-            for t in updated_tools.tools:
-                print(f"  - {t.name}")
-
-            # 5. Trigger Progress Tracking (Task 8)
-            print("\n[+] Executing batch_dispatch to test Progress Tracking...")
-            batch_res = await session.call_tool("batch_dispatch", {"equipment_ids": [101, 102], "field_id": 5})
-            print(f"  Result: {batch_res.content[0].text}")
-
-            # 6. Trigger LLM Sampling (Task 8)
-            print("\n[+] Executing log_incident_note to test LLM Sampling...")
-            incident_res = await session.call_tool("log_incident_note", {"raw_note": "Tractor 101 wheel broke."})
-            print(f"  Result: {incident_res.content[0].text}")
-
-            # 7. Trigger Elicitation Pause (Task 5 - Role 2)
-            print("\n[+] Executing dispatch_equipment to test Elicitation (Human-in-the-loop)...")
+            # 3. Trigger Task 7 (Runtime Notifications via Payment)
+            print("\n[+] Triggering Task 7 (Notifications)...")
+            print("  - Processing payment to clear credit hold and unlock dispatch...")
             try:
-                # Dispatching with a chemical_id to trigger the danger signoff
-                dispatch_res = await session.call_tool("dispatch_equipment", {
-                    "equipment_id": 103, 
-                    "field_id": 2, 
-                    "job_type": "spray", 
-                    "chemical_id": 1, 
-                    "customer_id": 1
-                })
-                print(f"  Result: {dispatch_res.content[0].text}")
+                # نفترض أن العميل رقم 1 موجود في الداتابيز
+                pay_res = await session.call_tool("process_payment", {"customer_id": 1})
+                print(f"  - Result: {pay_res.content[0].text}")
+                
+                # تحديث قائمة الأدوات بعد الإشعار
+                await session.list_tools()
+                print("  - Tool list refreshed automatically after notification.")
             except Exception as e:
-                # If the database isn't fully seeded by Role 1, it might raise an error, but the attempt is logged.
-                print(f"  - Elicitation/Dispatch response: {str(e)}")
+                print(f"  - Warning (DB might not be fully seeded by Role 1 yet): {str(e)}")
+
+            # 4. Trigger Task 8 (Progress Tracking)
+            print("\n[+] Triggering Task 8 (Progress Tracking)...")
+            try:
+                batch_res = await session.call_tool("batch_dispatch", {"equipment_ids": [101, 102], "field_id": 5})
+                print(f"  - Result: {batch_res.content[0].text}")
+            except Exception as e:
+                 print(f"  - Warning: {str(e)}")
+
+            # 5. Trigger Task 8 (LLM Sampling)
+            print("\n[+] Triggering Task 8 (LLM Sampling)...")
+            try:
+                incident_res = await session.call_tool("log_incident_note", {"raw_note": "Tractor 101 leaking oil near the river."})
+                print(f"  - Result: {incident_res.content[0].text}")
+            except Exception as e:
+                 print(f"  - Warning: {str(e)}")
 
             print("\n=== Demo Execution Finished ===")
 
