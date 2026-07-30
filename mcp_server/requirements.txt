@@ -5,6 +5,7 @@ attrs==26.1.0
 cffi==2.1.0
 click==8.4.2
 cryptography==49.0.0
+fastmcp
 h11==0.16.0
 httpcore2==2.9.1
 httpx2==2.9.1
