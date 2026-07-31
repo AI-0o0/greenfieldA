@@ -1,0 +1,57 @@
+Connecting to server...
+==================================================
+RUNNING TC01_happy_till: Idle tractor, valid field/customer match, no chemical — baseline success
+PROMPT: Dispatch equipment 1 to field 1 for customer 1 to till the field.
+==================================================
+
+🧠 [MODEL CALLS TOOL]: dispatch_equipment({'input_data': {'customer_id': 1, 'equipment_id': 1, 'field_id': 1, 'job_type': 'till'}})
+⚙️ [TOOL RESULT]: SUCCESS: Equipment 1 dispatched to field 1 for till.
+✅ Finished TC01_happy_till
+
+
+🤖 [AGENT FINAL ANSWER]: The equipment has been successfully dispatched.
+
+==================================================
+RUNNING TC02_happy_harvest: Idle harvester, valid field/customer match — baseline success, different job type
+PROMPT: Dispatch equipment 5 to field 2 for customer 1 to harvest the field.
+==================================================
+
+🧠 [MODEL CALLS TOOL]: dispatch_equipment({'input_data': {'customer_id': 1, 'equipment_id': 5, 'field_id': 2, 'job_type': 'harvest'}})
+⚙️ [TOOL RESULT]: SUCCESS: Equipment 5 dispatched to field 2 for harvest.
+✅ Finished TC02_happy_harvest
+
+
+🤖 [AGENT FINAL ANSWER]: The equipment has been dispatched.
+
+==================================================
+RUNNING TC03_spray_low_hazard_no_elicitation: Spray job with Neem Oil Extract (chemical 3, requires_signoff=0) — should complete immediately, no elicitation
+PROMPT: Dispatch equipment 3 to field 1 for customer 1 to spray chemical 3 (Neem Oil Extract).
+==================================================
+
+🧠 [MODEL CALLS TOOL]: dispatch_equipment({'input_data': {'chemical_id': 3, 'customer_id': 1, 'equipment_id': 3, 'field_id': 1, 'job_type': 'spray'}})
+⚙️ [TOOL RESULT]: SUCCESS: Equipment 3 dispatched to field 1 for spray. (Chemical applied: Neem Oil Extract)
+✅ Finished TC03_spray_low_hazard_no_elicitation
+
+
+🤖 [AGENT FINAL ANSWER]: The equipment has been dispatched.
+
+==================================================
+RUNNING TC04_spray_restricted_elicitation_glyphosate: Spray with Glyphosate (chemical 1, requires_signoff=1) — elicitation must fire
+PROMPT: Dispatch equipment 3 to field 2 for customer 1 to spray chemical 1 (Glyphosate).
+==================================================
+
+🧠 [MODEL CALLS TOOL]: dispatch_equipment({'input_data': {'chemical_id': 1, 'customer_id': 1, 'equipment_id': 3, 'field_id': 2, 'job_type': 'spray'}})
+
+[HUMAN SIGN-OFF REQUESTED BY SERVER]: DANGER: Chemical 'Glyphosate' is restricted. Approve dispatching equipment 3 to field 2?
+[HUMAN RESPONDS]: {'approved': True, 'notes': 'Approved by automated test runner'}
+
+⚙️ [TOOL RESULT]: SUCCESS: Equipment 3 dispatched to field 2 for spray. (Chemical applied: Glyphosate)
+✅ Finished TC04_spray_restricted_elicitation_glyphosate
+
+
+🤖 [AGENT FINAL ANSWER]: The equipment has been dispatched.
+
+==================================================
+RUNNING TC05_spray_restricted_elicitation_chlorpyrifos: Spray with Chlorpyrifos (chemical 2, requires_signoff=1) — second positive elicitation case, different chemical
+PROMPT: Dispatch equipment 3 to field 4 for customer 2 to spray chemical 2 (Chlorpyrifos).
+==================================================
