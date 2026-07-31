@@ -69,7 +69,7 @@ async def batch_dispatch(input_data: BatchDispatchInput, ctx: Context) -> str:
 
     with get_db_connection() as conn:
         for i, eq_id in enumerate(input_data.equipment_ids):
-            conn.execute("INSERT OR REPLACE INTO EQUIPMENT (equipment_id, status) VALUES (?, 'dispatched')", (eq_id,))
+            conn.execute("UPDATE Equipment SET status = 'dispatched' WHERE equipment_id = ?", (eq_id,))
             conn.commit()
             await asyncio.sleep(0.2)
             
@@ -88,21 +88,22 @@ async def log_incident_note(input_data: IncidentInput, ctx: Context) -> str:
     try:
         sampling_result = await ctx.session.create_message(
             messages=[
-                types.SamplingMessage(
-                    role="user",
-                    content=types.TextContent(
-                        type="text",
-                        text=f"Structure this incident note into a concise summary and determine severity: {input_data.raw_note}"
-                    )
-                )
+                {
+                    "role": "user",
+                    "content": {
+                        "type": "text",
+                        "text": f"Structure this incident note into a concise summary and determine severity: {input_data.raw_note}"
+                    }
+                }
             ],
             max_tokens=200
         )
         llm_response = sampling_result.content.text if sampling_result and sampling_result.content else "Parsed."
     except Exception as e:
-        llm_response = f"Sampling simulated successfully. Note recorded: {input_data.raw_note}"
+        llm_response = f"Sampling failed: {str(e)} | Note recorded: {input_data.raw_note}"
 
     return f"Incident logged. Structured Output: {llm_response}"
+
 
 DISPATCH_SCHEMA = {
     "type": "object",

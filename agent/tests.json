@@ -1,0 +1,92 @@
+[
+  {
+    "id": "TC01_happy_till",
+    "description": "Idle tractor, valid field/customer match, no chemical — baseline success",
+    "prompt": "Dispatch equipment 1 to field 1 for customer 1 to till the field."
+  },
+  {
+    "id": "TC02_happy_harvest",
+    "description": "Idle harvester, valid field/customer match — baseline success, different job type",
+    "prompt": "Dispatch equipment 5 to field 2 for customer 1 to harvest the field."
+  },
+  {
+    "id": "TC03_spray_low_hazard_no_elicitation",
+    "description": "Spray job with Neem Oil Extract (chemical 3, requires_signoff=0) — should complete immediately, no elicitation",
+    "prompt": "Dispatch equipment 3 to field 1 for customer 1 to spray chemical 3 (Neem Oil Extract)."
+  },
+  {
+    "id": "TC04_spray_restricted_elicitation_glyphosate",
+    "description": "Spray with Glyphosate (chemical 1, requires_signoff=1) — elicitation must fire",
+    "prompt": "Dispatch equipment 3 to field 2 for customer 1 to spray chemical 1 (Glyphosate)."
+  },
+  {
+    "id": "TC05_spray_restricted_elicitation_chlorpyrifos",
+    "description": "Spray with Chlorpyrifos (chemical 2, requires_signoff=1) — second positive elicitation case, different chemical",
+    "prompt": "Dispatch equipment 3 to field 4 for customer 2 to spray chemical 2 (Chlorpyrifos)."
+  },
+  {
+    "id": "TC06_spray_missing_chemical_id",
+    "description": "Model asked for a spray job without naming a chemical — tests whether it omits chemical_id and whether your handler's Validation 1 catches it before ever reaching elicitation",
+    "prompt": "Dispatch equipment 3 to field 1 for customer 1 to do a spray job on the field."
+  },
+  {
+    "id": "TC07_ownership_violation",
+    "description": "Field 5 belongs to customer 3 (Fayoum Green Estates) — requesting it under customer 1 must be blocked",
+    "prompt": "Dispatch equipment 1 to field 5 for customer 1 to till the field."
+  },
+  {
+    "id": "TC08_nonexistent_field",
+    "description": "Field ID not in seed data",
+    "prompt": "Dispatch equipment 1 to field 999 for customer 1 to till the field."
+  },
+  {
+    "id": "TC09_nonexistent_equipment",
+    "description": "Equipment ID not in seed data",
+    "prompt": "Dispatch equipment 999 to field 1 for customer 1 to till the field."
+  },
+  {
+    "id": "TC10_equipment_already_dispatched",
+    "description": "Equipment 2 is currently status='dispatched' — must be rejected as unavailable",
+    "prompt": "Dispatch equipment 2 to field 1 for customer 1 to till the field."
+  },
+  {
+    "id": "TC11_equipment_in_maintenance",
+    "description": "Equipment 4 (sprayer) is status='maintenance' — must be rejected even for a valid chemical job",
+    "prompt": "Dispatch equipment 4 to field 1 for customer 1 to spray chemical 3."
+  },
+  {
+    "id": "TC12_equipment_offline",
+    "description": "Equipment 6 (harvester) is status='offline' — distinct unavailable state from maintenance/dispatched",
+    "prompt": "Dispatch equipment 6 to field 3 for customer 2 to harvest the field."
+  },
+  {
+    "id": "TC13_ambiguous_prompt_no_ids",
+    "description": "No explicit equipment/field IDs given — tests whether the model hallucinates values or asks for clarification, and whether validation catches a bad guess either way",
+    "prompt": "Send some equipment out to do a job for customer 1."
+  },
+  {
+    "id": "TC14_batch_dispatch_progress",
+    "description": "Multiple idle machines, one batch call — should emit intermediate progress notifications, not one blocking response",
+    "prompt": "Dispatch equipment 1 and 5 as a batch job to field 1 for customer 1."
+  },
+  {
+    "id": "TC15_incident_note_sampling",
+    "description": "New free-text note (not one of the four already in seed data) — should trigger sampling/createMessage to structure it",
+    "prompt": "Log an incident note for equipment 3: nozzle sputtering intermittently during today's run near field 2, no leak observed, still operational."
+  },
+  {
+    "id": "TC16_query_pending_dispatch_status",
+    "description": "Dispatch 2 is already status='pending'/approval_status='pending' in seed data — read-tool check",
+    "prompt": "What's the current status of dispatch job 2?"
+  },
+  {
+    "id": "TC17_cancel_active_dispatch",
+    "description": "Dispatch 4 is status='approved' and not yet started — valid target for cancellation",
+    "prompt": "Cancel dispatch job 4."
+  },
+  {
+    "id": "TC18_cancel_already_cancelled",
+    "description": "Dispatch 5 is already status='cancelled' — edge case, should error gracefully rather than double-cancel silently",
+    "prompt": "Cancel dispatch job 5."
+  }
+]
