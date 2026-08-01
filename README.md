@@ -30,7 +30,7 @@ and the test case that proves it (pull straight from tests.json / your
 teammate's scripts):
 
 ### Capability negotiation
-[Yours to draft]
+[role 2]
 - Server declares: tools, resources, prompts (via FastMCP's automatic
   initialize handling)
 - Client checks server capabilities before relying on them: [file/line in
@@ -46,7 +46,7 @@ teammate's scripts):
 - Test: [the session-identity test flagged earlier — still needs building]
 
 ### Elicitation
-[Yours]
+[Role 2]
 - Trigger: job_type == "spray" AND chemical.requires_signoff == 1
 - File: mcp_server/server.py, dispatch_equipment handler
 - Outcomes handled: accept/approved, accept/denied, decline, cancel
@@ -79,7 +79,7 @@ teammate's scripts):
 - Test: TC14
 
 ### Defensive tool design
-[Yours]
+[Role 2]
 - dispatch_equipment: strict schema (Literal enums, additionalProperties:
   false), independent handler-level checks (existence, ownership,
   availability), separate from schema validation
