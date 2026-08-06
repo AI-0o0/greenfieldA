@@ -1,0 +1,13 @@
+[project]
+name = "greenfield-mcp-dispatch"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.14"
+dependencies = [
+    "fastmcp>=3.4.5",
+    "jsonschema>=4.26.0",
+    "langchain>=1.3.14",
+    "langchain-groq>=1.1.3",
+    "langgraph>=1.2.10",
+]

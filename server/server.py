@@ -1,20 +1,26 @@
-import asyncio
-import mcp.types as types
-from typing import Literal, Optional, List
-from fastmcp import FastMCP, Context
-from pydantic import BaseModel, Field, ConfigDict
-import sqlite3
 import os
+import sys
+import sqlite3
+import asyncio
 import jsonschema
-from jsonschema.exceptions import ValidationError
+import mcp.types as types 
+from fastmcp import FastMCP , Context
+from typing import Literal, Optional, List
+from mcp.types import ElicitRequestedSchema
+from pydantic import BaseModel, Field, ConfigDict
 
+current_dir = os.path.dirname(os.path.abspath(__file__))
+parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
+sys.path.append(parent_dir)
+
+# Initialize FastMCP server for Greenfield
 mcp = FastMCP("Greenfield-Dispatch-Server")
 
 def get_db_connection():
     # Fallback path creation if db folder is missing
     db_dir = os.path.join(os.path.dirname(__file__), "..", "db")
     os.makedirs(db_dir, exist_ok=True)
-    db_path = os.path.join(db_dir, "farm.db")
+    db_path = os.environ.get("GREENFIELD_DB_PATH") or os.path.join(db_dir, "farm.db")
     
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
@@ -50,6 +56,10 @@ class SignoffResponse(BaseModel):
     approved: bool = Field(description="Whether the human approves this chemical dispatch")
     notes: str = Field(default="", description="Optional reasoning for the decision")
 
+
+#============================================
+# Tools
+#============================================
 @mcp.tool()
 async def process_payment(input_data: PaymentInput, ctx: Context) -> str:
     """Process a customer payment to clear their credit hold and unlock dispatch tools."""
@@ -134,9 +144,6 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
     chem_id = input_data.chemical_id
     req_by = input_data.customer_id
 
-    # ============================================
-    # TASK 6: Capability Negotiation (Elicitation Gating)
-    # ============================================
     has_elicitation = ctx.session.check_client_capability(
         types.ClientCapabilities(elicitation=types.ElicitationCapability())
     )
@@ -147,9 +154,6 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
             "The dispatch_equipment tool is strictly disabled for this client."
         )
 
-    # ============================================
-    # TASK 4: Defensive Tool Design for Dispatch
-    # ============================================
     if job == "spray" and not chem_id:
         raise ValueError("chemical_id is required for spray jobs.")
 
@@ -188,10 +192,8 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
         if eq_status != "idle":
             raise ValueError(f"Equipment {eq_id} cannot be dispatched. Current status is: '{eq_status}'.")
 
-        # =========================================
-        # TASK 5: Chemical Application Elicitation
-        # =========================================
         chemical_name = None
+        signoff_approved = False
         if job == "spray" and chem_id:
             cursor.execute("SELECT * FROM Chemicals WHERE chemical_id = ?", (chem_id,))
             chemical = cursor.fetchone()
@@ -215,6 +217,7 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
                             "Dispatch denied by human reviewer"
                             + (f": {result.data.notes}" if result.data.notes else ".")
                         )
+                    signoff_approved = True
                     # approved — fall through to dispatch
                 elif result.action == "decline":
                     raise ValueError("Human declined to review this dispatch request.")
@@ -222,8 +225,38 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
                     raise RuntimeError("Sign-off request was cancelled before a decision was made.")
         # =========================================
 
-        # --- Success ---
-        msg = f"SUCCESS: Equipment {eq_id} dispatched to field {f_id} for {job}."
+        # --- Success: record the dispatch in the DB ---
+        cursor.execute(
+            "SELECT technician_id FROM Technicians "
+            "WHERE role = 'dispatcher' AND authenticated = 1 "
+            "ORDER BY technician_id LIMIT 1"
+        )
+        tech_row = cursor.fetchone()
+        tech_id = tech_row["technician_id"] if tech_row else 1
+
+        approval_status = "approved" if signoff_approved else "not_required"
+        approved_by = tech_id if signoff_approved else None
+
+        cursor.execute(
+            """
+            INSERT INTO Dispatch_Jobs
+                (equipment_id, field_id, technician_id, job_type, chemical_id,
+                 status, approval_status, approved_by, started_at)
+            VALUES (?, ?, ?, ?, ?, 'dispatched', ?, ?, CURRENT_TIMESTAMP)
+            """,
+            (eq_id, f_id, tech_id, job, chem_id, approval_status, approved_by),
+        )
+        dispatch_id = cursor.lastrowid
+        cursor.execute(
+            "UPDATE Equipment SET status = 'dispatched' WHERE equipment_id = ?",
+            (eq_id,),
+        )
+        conn.commit()
+
+        msg = (
+            f"SUCCESS: Equipment {eq_id} dispatched to field {f_id} for {job} "
+            f"(dispatch #{dispatch_id})."
+        )
         if chemical_name:
             msg += f" (Chemical applied: {chemical_name})"
 
@@ -234,12 +267,9 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
 
 
 # ============================================
-# TASK 2: Resources
+# Resources
 # ============================================
-# Static compliance doc: the model reads this once and reasons
-# over it, instead of us paying to re-explain buffer-zone rules
-# inside every prompt or wrapping it in a callable tool it has to
-# "ask" for.
+
 PESTICIDE_COMPLIANCE_POLICY = """\
 GREENFIELD AGRICULTURE — RESTRICTED CHEMICAL APPLICATION POLICY (v1.2)
 
@@ -311,7 +341,7 @@ def equipment_status_snapshot() -> str:
 
 
 # ============================================
-# TASK 2: Prompts
+# Prompts
 # ============================================
 @mcp.prompt()
 def draft_delay_explanation(dispatch_id: int) -> str:
@@ -353,26 +383,12 @@ def draft_delay_explanation(dispatch_id: int) -> str:
         f"the equipment is confirmed. Keep it under 80 words."
     )
 
-
-# ============================================
-# TASK 3: Transport (dual: stdio for dev, Streamable HTTP for deployment)
-# ============================================
-# Local dev keeps stdio (no network surface, fastest iteration loop).
-# Deployment moves to Streamable HTTP because dispatchers hit this
-# server from a shared web/agent host, not a local subprocess —
-# stdio can't be reached over the network. Switch with an env var so
-# the same server.py ships both ways without code changes:
-#
-#   MCP_TRANSPORT=stdio   python server.py      (default, local dev)
-#   MCP_TRANSPORT=http     python server.py      (Streamable HTTP, deployment)
+  
 if __name__ == "__main__":
-    transport = os.getenv("MCP_TRANSPORT", "stdio").lower()
-
-    if transport == "http":
-        mcp.run(
-            transport="streamable-http",
-            host=os.getenv("MCP_HOST", "127.0.0.1"),
-            port=int(os.getenv("MCP_PORT", "8000")),
-        )
-    else:
+    transport = sys.argv[1] if len(sys.argv) > 1 else "stdio"
+    if transport == "stdio":
+        sys.stderr.write("Starting Greenfield Server [stdio]...")
         mcp.run(transport="stdio")
+    elif transport == "http":
+        sys.stderr.write("Starting Greenfield Server [http:8080]...")
+        mcp.run(transport="streamable-http", host="0.0.0.0", port=8080)
