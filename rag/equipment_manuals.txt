@@ -1,1 +1,18 @@
+[DOC_ID: MAN_001]
+Equipment: SPR-3001 (Sprayer)
+Operating Guidelines:
+For spray jobs carrying restricted chemicals (such as Glyphosate), maximum speed must not exceed 12 km/h.
+Buffer zones: Minimum 15 meters from any canal or irrigation channel for restricted class chemicals.
+Maintenance: Nozzle inspection required every 50 operating hours.
 
+[DOC_ID: MAN_002]
+Equipment: TRC-2001 (Tractor)
+Operating Guidelines:
+Optimal tilling speed is 8 km/h. Fuel consumption increases significantly above 2200 RPM.
+Soil Conditions: Do not operate on fields with clay moisture exceeding 35% to prevent soil compaction.
+
+[DOC_ID: MAN_003]
+Chemical Policy: Glyphosate Application
+Hazard Class: Restricted.
+Sign-off Rule: Requires explicit human sign-off before dispatching equipment when chemical_id=1.
+Emergency Protocol: If leak occurs, trigger emergency_stop immediately and file an Incident Note.
