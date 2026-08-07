@@ -1,15 +1,17 @@
 import asyncio
 import sys
 
-from agent.agent import agent_step, ShortTermMemory
+from agent.agent import agent_step
+from memory.memory import ShortTermMemory, LongTermMemory
 from client.client import create_client 
-
 
 
 # Parse transport mode from CLI args (default to stdio)
 MODE = sys.argv[1] if len(sys.argv) > 1 else "stdio"
 
-memory = ShortTermMemory()
+# Initialize long-term and short-term memory
+long_term = LongTermMemory()
+memory = ShortTermMemory(max_turns=20, long_term_memory=long_term)
 
 async def main():
     async with create_client(mode=MODE) as client:

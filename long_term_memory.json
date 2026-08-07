@@ -1,0 +1,57 @@
+{
+  "semantic_facts": {
+    "fact_1": "Abdo manages customer ID 1"
+  },
+  "episodic_events": [
+    {
+      "summary": "user asked about their identity",
+      "context": "user identity",
+      "outcome": "identified user"
+    },
+    {
+      "summary": "tractor 4 broke its axle",
+      "context": null,
+      "outcome": null
+    },
+    {
+      "summary": "tractor 4 broke its axle on Field 12",
+      "context": null,
+      "outcome": null
+    },
+    {
+      "summary": null,
+      "context": null,
+      "outcome": null
+    },
+    {
+      "summary": null,
+      "context": null,
+      "outcome": null
+    },
+    {
+      "summary": null,
+      "context": null,
+      "outcome": null
+    },
+    {
+      "summary": "Tractor 4 broke its axle on Field 12 while harvesting corn",
+      "context": null,
+      "outcome": "Incident logged"
+    },
+    {
+      "summary": null,
+      "context": null,
+      "outcome": null
+    },
+    {
+      "summary": "tractor 4 broke its axle",
+      "context": "harvesting incident",
+      "outcome": "towed back to main barn"
+    },
+    {
+      "summary": null,
+      "context": null,
+      "outcome": null
+    }
+  ]
+}
