@@ -4,12 +4,6 @@ from dotenv import load_dotenv
 from pydantic import ValidationError
 
 from langchain.chat_models import init_chat_model
-from langchain_core.messages import (
-    AIMessage,
-    HumanMessage,
-    SystemMessage,
-    BaseMessage,
-)
 
 from .schema import (
     ACTION_INPUT_SCHEMAS,
@@ -19,40 +13,7 @@ from .schema import (
     MAX_STEPS,
 )
 
-class ShortTermMemory:
-    def __init__(self, max_turns: int = 20):
-        self.max_turns = max_turns
-        self.messages: List[BaseMessage] = []
-        self.scratchpad: Dict[str, Any] = {}
-
-    def set_system_prompt(self, content: str):
-        """Maintains a single active system prompt at the root."""
-        if self.messages and isinstance(self.messages[0], SystemMessage):
-            self.messages[0] = SystemMessage(content=content)
-        else:
-            self.messages.insert(0, SystemMessage(content=content))
-
-    def add_user(self, content: str):
-        self.messages.append(HumanMessage(content=content))
-        self._truncate()
-
-    def add_ai(self, content: str):
-        self.messages.append(AIMessage(content=content))
-        self._truncate()
-
-    def add_observation(self, content: str):
-        self.messages.append(HumanMessage(content=f"[Observation]: {content}"))
-        self._truncate()
-
-    def _truncate(self):
-        # Preserve SystemMessage at index 0 while truncating history
-        if len(self.messages) > self.max_turns + 1:
-            system_msg = [self.messages[0]] if isinstance(self.messages[0], SystemMessage) else []
-            history = self.messages[1:] if system_msg else self.messages
-            self.messages = system_msg + history[-self.max_turns:]
-
-    def get_context(self) -> List[BaseMessage]:
-        return self.messages
+from memory.memory import ShortTermMemory
 load_dotenv()
 
 
@@ -70,6 +31,8 @@ Additional Instructions:
 4. If a tool call fails, try a different tool if relevant; do NOT retry the same tool with identical inputs.
 5. If you cannot answer using available tools, set your action to 'escalate' to hand off to human support.
 6. If the user input does not require tools, set your action to 'final_answer' directly.
+7. If the user input is ambiguous or lacks necessary details (e.g., greetings, general help requests, personal statements), do NOT invoke tools. Set your action to 'final_answer' directly.
+8. Only use 'log_incident_note' for actual physical farm incidents, chemical spills, or equipment damage.
 
 Think step by step and return only the structured response."""
 
@@ -98,25 +61,21 @@ def handle_final_action(step: AgentStep) -> bool:
     return step.action in TERMINAL_ACTIONS
 
 
-async def tool_call(step: AgentStep, tools: Dict[str, Any]) -> Any:
-    tool = tools[step.action]
+async def tool_call(client, step: AgentStep) -> Any:
     payload = step.action_input or {}
 
-    # Validate schema if defined
+    # Validate schema using defined Pydantic model
     schema_cls = ACTION_INPUT_SCHEMAS.get(step.action)
     if schema_cls and isinstance(payload, dict):
         validated_input = schema_cls(**payload)
         payload = validated_input.model_dump()
 
-    # Invoke tool safely (handles async & sync tools via LangChain interface)
-    if hasattr(tool, "ainvoke"):
-        return await tool.ainvoke(payload)
-    elif callable(tool):
-        if isinstance(payload, dict):
-            return await asyncio.to_thread(tool, **payload)
-        return await asyncio.to_thread(tool, payload)
-    else:
-        raise ValueError(f"Tool {step.action} is not invokable.")
+    # Wrap payload for FastMCP tool signature expectations
+    mcp_payload = {"input_data": payload} if payload else {}
+
+    # Invoke tool via MCP client call interface
+    result = await client.call_tool(step.action, mcp_payload)
+    return result
 
 
 async def agent_step(client, memory: ShortTermMemory, user_input: str) -> Optional[AgentStep]:
@@ -125,12 +84,30 @@ async def agent_step(client, memory: ShortTermMemory, user_input: str) -> Option
     tools = await discover_tools(client)
     current_tool_names = sorted(tools.keys())
 
-    # Build system prompt without duplicating
+    # Extract semantic facts and recent episodic events
+    semantic_context = ""
+    if hasattr(memory, "long_term"):
+        if memory.long_term.semantic_facts:
+            facts_list = [f"- {k}: {v}" for k, v in memory.long_term.semantic_facts.items()]
+            semantic_context += "\nKnown Facts:\n" + "\n".join(facts_list) + "\n"
+
+        if memory.long_term.episodic_events:
+            # Take the 5 most recent episodic events
+            events_list = [
+                f"- {e.get('summary')}: Context={e.get('context')}, Outcome={e.get('outcome')}"
+                for e in memory.long_term.episodic_events[-5:]
+                if e.get("summary")
+            ]
+            if events_list:
+                semantic_context += "\nPast Logged Events:\n" + "\n".join(events_list) + "\n"
+
     system_prompt = (
         f"Current plan: {memory.scratchpad.get('plan')}\n"
         f"Sub-goal: {memory.scratchpad.get('current_subgoal')}\n"
+        f"{semantic_context}"
         f"{build_system_prompt(current_tool_names)}"
     )
+    memory.set_system_prompt(system_prompt)
     memory.set_system_prompt(system_prompt)
 
     model = build_structured_model(current_tool_names)
@@ -163,12 +140,13 @@ async def agent_step(client, memory: ShortTermMemory, user_input: str) -> Option
             continue
 
         try:
-            result = await tool_call(step, tools)
+            result = await tool_call(client, step)
             print(f"Observation from {step.action}: {result}")
             memory.add_observation(f"Result from {step.action}: {result}")
         except ValidationError as e:
             memory.add_observation(f"Invalid arguments for {step.action}: {e.errors()}")
         except Exception as e:
+            print(f"Tool Execution Error: {e}")
             memory.add_observation(f"Error executing tool {step.action}: {str(e)}")
 
     print("Reached maximum execution steps without a final answer.")

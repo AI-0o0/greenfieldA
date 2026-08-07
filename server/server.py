@@ -94,26 +94,8 @@ async def batch_dispatch(input_data: BatchDispatchInput, ctx: Context) -> str:
 
 @mcp.tool()
 async def log_incident_note(input_data: IncidentInput, ctx: Context) -> str:
-    """Log an unstructured incident note and structure it using LLM sampling."""
-    try:
-        sampling_result = await ctx.session.create_message(
-            messages=[
-                {
-                    "role": "user",
-                    "content": {
-                        "type": "text",
-                        "text": f"Structure this incident note into a concise summary and determine severity: {input_data.raw_note}"
-                    }
-                }
-            ],
-            max_tokens=200
-        )
-        llm_response = sampling_result.content.text if sampling_result and sampling_result.content else "Parsed."
-    except Exception as e:
-        llm_response = f"Sampling failed: {str(e)} | Note recorded: {input_data.raw_note}"
-
-    return f"Incident logged. Structured Output: {llm_response}"
-
+    """Log an unstructured incident note."""
+    return f"SUCCESS: Incident recorded: {input_data.raw_note}"
 
 DISPATCH_SCHEMA = {
     "type": "object",
