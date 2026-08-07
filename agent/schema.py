@@ -21,10 +21,15 @@ class AgentStep(BaseModel):
     """
 
     thought: str
-    action: str
-    action_input: dict = Field(default_factory=dict)
+    action: Literal["call_tool", "respond", "replan"]
+    action_input: Optional[dict] = None
+    final_answer: Optional[str] = None
+    plan_updated: bool
+    new_plan: Optional[str] = None
+    next_subgoal: Optional[str] = None
     is_final: bool
-
+    
+    
 
 def build_agent_step_model(action_names):
     """

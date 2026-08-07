@@ -1,15 +1,19 @@
 import asyncio
 import sys
 
-from agent.agent import run_agent
-from client.client import create_client
+from agent.agent import agent_step, ShortTermMemory
+from client.client import create_client 
 
 
-mode = sys.argv[1] if len(sys.argv) > 1 else "stdio"
 
+# Parse transport mode from CLI args (default to stdio)
+MODE = sys.argv[1] if len(sys.argv) > 1 else "stdio"
+
+memory = ShortTermMemory()
 
 async def main():
-    async with create_client() as client:
+    async with create_client(mode=MODE) as client:
+        # Pre-warm or discover client capabilities
         await client.list_tools()
 
         print("===================================")
@@ -17,26 +21,48 @@ async def main():
         print("Type 'exit' to quit")
         print("===================================\n")
 
-        # Temporary single-session user
         user_id = "default_user"
 
         while True:
-            user_input = input("User: ").strip()
+            try:
+                # Non-blocking input to allow asyncio event loop processing
+                user_input = await asyncio.to_thread(input, "User: ")
+                user_input = user_input.strip()
+            except (KeyboardInterrupt, EOFError):
+                print("\nGoodbye!")
+                break
+
+            if not user_input:
+                continue
 
             if user_input.lower() == "exit":
                 print("Goodbye!")
                 break
 
-            step = await run_agent(
+            step = await agent_step(
                 client=client,
                 user_input=user_input,
-                user_id=user_id,
+                memory=memory,
             )
 
-            if step and step.action == "end_conversation":
+            if not step:
+                print("Agent: I encountered an issue processing that request.\n")
+                continue
+
+            # Output the agent's answer if a terminal state was reached
+            if step.action == "final_answer":
+                answer = step.action_input.get("answer") if isinstance(step.action_input, dict) else step.action_input
+                print(f"Agent: {answer}\n")
+            elif step.action == "escalate":
+                print("Agent: Escalating this issue to a human support representative.\n")
+            
+            if step.action in ("end_conversation", "escalate"):
                 print("Conversation ended.")
                 break
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        print("\nProcess interrupted. Exiting...")

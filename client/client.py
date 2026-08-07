@@ -48,7 +48,7 @@ async def on_elicitation(
 
 
 @asynccontextmanager
-async def create_client():
+async def create_client(mode: str = "stdio"):
     # 1. Build the configuration dictionary based on the transport mode
     if mode == "stdio":
         config = {
