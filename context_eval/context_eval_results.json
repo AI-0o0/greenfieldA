@@ -1,0 +1,66 @@
+[
+  {
+    "strategy": "sliding_window",
+    "test_id": "TC1_waterway_buffer",
+    "recalled_correctly": true,
+    "input_tokens": 348,
+    "output_tokens": 239,
+    "latency_seconds": 1.32
+  },
+  {
+    "strategy": "observation_masking",
+    "test_id": "TC1_waterway_buffer",
+    "recalled_correctly": true,
+    "input_tokens": 1311,
+    "output_tokens": 93,
+    "latency_seconds": 0.7
+  },
+  {
+    "strategy": "recursive_summarization",
+    "test_id": "TC1_waterway_buffer",
+    "recalled_correctly": true,
+    "input_tokens": 479,
+    "output_tokens": 81,
+    "latency_seconds": 0.61
+  },
+  {
+    "strategy": "zone_based_pruning",
+    "test_id": "TC1_waterway_buffer",
+    "recalled_correctly": false,
+    "input_tokens": 414,
+    "output_tokens": 216,
+    "latency_seconds": 1.13
+  },
+  {
+    "strategy": "sliding_window",
+    "test_id": "TC2_equipment_history",
+    "recalled_correctly": true,
+    "input_tokens": 347,
+    "output_tokens": 108,
+    "latency_seconds": 4.92
+  },
+  {
+    "strategy": "observation_masking",
+    "test_id": "TC2_equipment_history",
+    "recalled_correctly": true,
+    "input_tokens": 1310,
+    "output_tokens": 67,
+    "latency_seconds": 4.0
+  },
+  {
+    "strategy": "recursive_summarization",
+    "test_id": "TC2_equipment_history",
+    "recalled_correctly": true,
+    "input_tokens": 540,
+    "output_tokens": 82,
+    "latency_seconds": 2.67
+  },
+  {
+    "strategy": "zone_based_pruning",
+    "test_id": "TC2_equipment_history",
+    "recalled_correctly": false,
+    "input_tokens": 403,
+    "output_tokens": 162,
+    "latency_seconds": 2.92
+  }
+]
