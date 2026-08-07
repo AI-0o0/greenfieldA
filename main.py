@@ -14,7 +14,7 @@ long_term = LongTermMemory()
 memory = ShortTermMemory(max_turns=20, long_term_memory=long_term)
 
 async def main():
-    async with create_client(mode=MODE) as client:
+    async with create_client(mode="stdio") as client:
         # Pre-warm or discover client capabilities
         await client.list_tools()
 

@@ -8,7 +8,8 @@ from fastmcp import FastMCP , Context
 from typing import Literal, Optional, List
 from mcp.types import ElicitRequestedSchema
 from pydantic import BaseModel, Field, ConfigDict
-
+from dotenv import load_dotenv
+load_dotenv()
 # Import RAG Search Function
 from rag.retrievers import hybrid_search
 
