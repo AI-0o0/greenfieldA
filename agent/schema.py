@@ -1,4 +1,4 @@
-from typing import Literal
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, create_model
 
@@ -16,7 +16,7 @@ TERMINAL_ACTIONS = {
 class AgentStep(BaseModel):
     """
     Runtime step produced by the agent.
-    The actual model is rebuilt every turn so the `action`
+    The actual model is rebuilt every turn so the action
     field always matches the currently available MCP tools.
     """
 
@@ -28,12 +28,11 @@ class AgentStep(BaseModel):
     new_plan: Optional[str] = None
     next_subgoal: Optional[str] = None
     is_final: bool
-    
-    
+
 
 def build_agent_step_model(action_names):
     """
-    Build an AgentStep model whose `action` field is restricted
+    Build an AgentStep model whose action field is restricted
     to the MCP tools currently exposed by the server plus the
     terminal actions.
     """
@@ -106,6 +105,12 @@ class ReportInput(StrictInput):
     month: str
 
 
+class KnowledgeSearchInput(StrictInput):
+    query: str = Field(
+        description="Search query to lookup manuals, chemical policies, or operating procedures."
+    )
+
+
 # ==========================================================
 # Action → Input Schema Mapping
 # ==========================================================
@@ -129,6 +134,10 @@ ACTION_INPUT_SCHEMAS = {
     "pesticide_compliance_policy": EmptyInput,
 
     "draft_delay_explanation": EmptyInput,
+
+    # ===== RAG Tools =====
+
+    "search_agricultural_knowledge": KnowledgeSearchInput,
 
     # ===== Terminal =====
 

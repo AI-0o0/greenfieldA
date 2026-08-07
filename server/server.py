@@ -9,6 +9,9 @@ from typing import Literal, Optional, List
 from mcp.types import ElicitRequestedSchema
 from pydantic import BaseModel, Field, ConfigDict
 
+# Import RAG Search Function
+from rag.retrievers import hybrid_search
+
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
 sys.path.append(parent_dir)
@@ -52,6 +55,10 @@ class DispatchInput(BaseModel):
     chemical_id: Optional[int] = Field(default=None, description="Required only when job_type is spray")
     customer_id: int = Field(description="ID of the authenticated customer")
 
+class KnowledgeSearchInput(BaseModel):
+    model_config = ConfigDict(extra='forbid')
+    query: str = Field(description="Search query for agricultural manuals, policies, or procedures.")
+
 class SignoffResponse(BaseModel):
     approved: bool = Field(description="Whether the human approves this chemical dispatch")
     notes: str = Field(default="", description="Optional reasoning for the decision")
@@ -60,6 +67,16 @@ class SignoffResponse(BaseModel):
 #============================================
 # Tools
 #============================================
+@mcp.tool()
+async def search_agricultural_knowledge(input_data: KnowledgeSearchInput, ctx: Context) -> str:
+    """Search internal agricultural manuals, chemical compliance policies, and operating procedures."""
+    chunks = hybrid_search(input_data.query, top_k=3)
+    if not chunks:
+        return "No relevant knowledge base documents found."
+    
+    retrieved_text = "\n---\n".join(chunks)
+    return f"Retrieved Knowledge:\n{retrieved_text}"
+
 @mcp.tool()
 async def process_payment(input_data: PaymentInput, ctx: Context) -> str:
     """Process a customer payment to clear their credit hold and unlock dispatch tools."""
@@ -117,7 +134,7 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
     # Schema-level validation (types/shape, independent of the checks below)
     try:
         jsonschema.validate(instance=input_data.model_dump(exclude_none=True), schema=DISPATCH_SCHEMA)
-    except ValidationError as e:
+    except jsonschema.ValidationError as e:
         raise ValueError(f"SECURITY BLOCK: Schema validation failed. {e.message}")
 
     eq_id = input_data.equipment_id
