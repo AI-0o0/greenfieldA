@@ -3,7 +3,7 @@ name = "greenfield-mcp-dispatch"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11,<3.13"
 dependencies = [
     "chromadb>=1.5.9",
     "fastmcp>=3.4.5",
@@ -13,4 +13,13 @@ dependencies = [
     "langgraph>=1.2.10",
     "rank-bm25>=0.2.2",
     "sentence-transformers>=5.7.0",
+    "watchdog>=4.0.0",
 ]
+
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cpu" }
