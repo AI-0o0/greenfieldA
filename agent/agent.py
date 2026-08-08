@@ -15,6 +15,7 @@ from .schema import (
 
 from memory.memory import ShortTermMemory
 load_dotenv()
+from context_eval.strategies import recursive_summarization
 
 
 def build_system_prompt(tool_names: List[str]) -> str:
@@ -116,7 +117,11 @@ async def agent_step(client, memory: ShortTermMemory, user_input: str) -> Option
         print(f"\n--- Step {step_num + 1} ---")
 
         try:
-            step: AgentStep = await model.ainvoke(memory.get_context())
+            # implement recursive summarization as a context management strategy 
+            raw_context = memory.get_context() 
+            pruned_context = recursive_summarization(raw_context, model, keep_recent=6)
+            step: AgentStep = await model.ainvoke(pruned_context)
+
         except Exception as e:
             memory.add_observation(f"Failed to generate structured step: {str(e)}")
             return None
