@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 # Import RAG Search Function
 from rag.retrievers import hybrid_search
+from rag.verifier import self_rag_verify
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
 parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
@@ -76,7 +77,18 @@ async def search_agricultural_knowledge(input_data: KnowledgeSearchInput, ctx: C
         return "No relevant knowledge base documents found."
     
     retrieved_text = "\n---\n".join(chunks)
-    return f"Retrieved Knowledge:\n{retrieved_text}"
+    
+    # Self-RAG Pre-Verification Check
+    verification = self_rag_verify(
+        query=input_data.query, 
+        context=chunks, 
+        answer=retrieved_text
+    )
+    
+    if not verification.is_relevant:
+        return "[Self-RAG Flag]: Retrieved documents failed relevance verification."
+
+    return f"Retrieved Knowledge (Relevance Confirmed):\n{retrieved_text}"
 
 @mcp.tool()
 async def process_payment(input_data: PaymentInput, ctx: Context) -> str:

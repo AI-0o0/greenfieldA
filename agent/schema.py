@@ -146,4 +146,5 @@ ACTION_INPUT_SCHEMAS = {
     "end_conversation": FinalAnswerInput,
 
     "final_answer": FinalAnswerInput,
+    "equipment_status_snapshot": EmptyInput,
 }
