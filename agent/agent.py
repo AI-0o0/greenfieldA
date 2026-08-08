@@ -2,9 +2,9 @@ import asyncio
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
 from pydantic import ValidationError
-
+from langchain_core.messages import HumanMessage
 from langchain.chat_models import init_chat_model
-
+from server.rag.verifier import self_rag_verify
 from .schema import (
     ACTION_INPUT_SCHEMAS,
     AgentStep,
@@ -18,32 +18,40 @@ load_dotenv()
 from context_eval.strategies import recursive_summarization
 
 
+from typing import List
+
 def build_system_prompt(tool_names: List[str]) -> str:
     tool_list = "\n".join(sorted(tool_names))
-    return f"""You are a constrained support agent.
+    return f"""You are a constrained support agent for Greenfield Agriculture.
 
-Use ONLY these tools:
+Available Tools:
 {tool_list}
 
-Additional Instructions:
-1. Do NOT retry calling a tool if you already received an Observation from it.
-2. Once you have gathered enough information, set your action to 'final_answer' and provide the response in 'action_input.answer'.
-3. Do NOT invent or call tools that are not listed above.
-4. If a tool call fails, try a different tool if relevant; do NOT retry the same tool with identical inputs.
-5. If you cannot answer using available tools, set your action to 'escalate' to hand off to human support.
-6. If the user input does not require tools, set your action to 'final_answer' directly.
-7. If the user input is ambiguous or lacks necessary details (e.g., greetings, general help requests, personal statements), do NOT invoke tools. Set your action to 'final_answer' directly.
-8. Only use 'log_incident_note' for actual physical farm incidents, chemical spills, or equipment damage.
+Strict Execution Instructions:
+1. MANDATORY RAG SEARCH FOR KNOWLEDGE / POLICIES:
+   - If the user asks about operating speeds, chemical rules, buffer zones, SOP codes, or equipment manuals, you MUST call 'search_agricultural_knowledge' FIRST to retrieve grounded document context before giving a final answer.
+   - Never answer compliance or manual questions from memory without searching.
+
+2. FLEET & EQUIPMENT STATUS:
+   - When asked to check equipment or overall fleet status, do NOT talk about the tool in 'final_answer'. Set action to 'equipment_status_snapshot' immediately to fetch live data.
+   - Do NOT invoke 'dispatch_equipment' or 'batch_dispatch' unless you are executing an actual job with explicit IDs.
+
+3. MEMORY & USER FACTS:
+   - When acknowledging user facts, preferences, or allergies (e.g. "Customer 1 is allergic to SPR-3001"), acknowledge them directly using 'final_answer'. Do NOT call 'log_incident_note' or other tools. Memory eviction and consolidation handle context automatically.
+   - Only use 'log_incident_note' for actual physical farm emergencies, chemical spills, or equipment damage. When calling it, pass a single string field named 'raw_note'.
+
+4. FINAL RESPONSES:
+   - When you have enough information or need to respond directly to the user, set action to 'final_answer' and put your response message inside 'action_input.answer'.
+   - Output clean, valid JSON strings for all tool arguments and responses.
 
 Think step by step and return only the structured response."""
-
-
 def build_structured_model(action_names: List[str]):
     step_model = build_agent_step_model(action_names)
     return init_chat_model(
         model="llama-3.3-70b-versatile",
         model_provider="groq",
         max_tokens=1024,
+        temperature=0.1,
         max_retries=3,
     ).with_structured_output(step_model)
 
@@ -109,7 +117,6 @@ async def agent_step(client, memory: ShortTermMemory, user_input: str) -> Option
         f"{build_system_prompt(current_tool_names)}"
     )
     memory.set_system_prompt(system_prompt)
-    memory.set_system_prompt(system_prompt)
 
     model = build_structured_model(current_tool_names)
 
@@ -117,12 +124,12 @@ async def agent_step(client, memory: ShortTermMemory, user_input: str) -> Option
         print(f"\n--- Step {step_num + 1} ---")
 
         try:
-            # implement recursive summarization as a context management strategy 
             raw_context = memory.get_context() 
             pruned_context = recursive_summarization(raw_context, model, keep_recent=6)
             step: AgentStep = await model.ainvoke(pruned_context)
-
         except Exception as e:
+            # Print the exact error to terminal so you can debug model structured output issues
+            print(f"[Agent Step Error]: {e}")
             memory.add_observation(f"Failed to generate structured step: {str(e)}")
             return None
 
@@ -136,6 +143,12 @@ async def agent_step(client, memory: ShortTermMemory, user_input: str) -> Option
             memory.scratchpad["current_subgoal"] = getattr(step, "next_subgoal", None)
 
         if handle_final_action(step):
+            answer_text = str(step.action_input.get("answer") if isinstance(step.action_input, dict) else step.action_input)
+            recent_context = [m.content for m in memory.get_context() if isinstance(m, HumanMessage)][-3:]
+            v_result = self_rag_verify(user_input, recent_context, answer_text)
+            
+            if not v_result.is_supported:
+                print(f"[Self-RAG Warning]: Answer lacks sufficient grounding ({v_result.reasoning})")
             return step
 
         if not validate_step(step, tools):
@@ -149,10 +162,10 @@ async def agent_step(client, memory: ShortTermMemory, user_input: str) -> Option
             print(f"Observation from {step.action}: {result}")
             memory.add_observation(f"Result from {step.action}: {result}")
         except ValidationError as e:
-            memory.add_observation(f"Invalid arguments for {step.action}: {e.errors()}")
-        except Exception as e:
-            print(f"Tool Execution Error: {e}")
-            memory.add_observation(f"Error executing tool {step.action}: {str(e)}")
-
+            # Log validation failure as observation so LLM learns and fixes its input shape
+            err_msg = f"Invalid schema arguments for {step.action}: {e.errors()}"
+            print(err_msg)
+            memory.add_observation(err_msg)
+            continue
     print("Reached maximum execution steps without a final answer.")
     return None
