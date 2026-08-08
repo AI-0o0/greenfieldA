@@ -1,57 +1,83 @@
 {
   "semantic_facts": {
-    "fact_1": "Abdo manages customer ID 1"
+    "customer_1_allergy": {
+      "current_value": "Customer 1 is allergic to SPR-3001",
+      "version": 1,
+      "last_updated": "2026-08-08T04:49:08.576795",
+      "resolution_type": "new_fact",
+      "history": []
+    },
+    "customer_1_manager": {
+      "current_value": "Customer 1 is managed by Abdo",
+      "version": 1,
+      "last_updated": "2026-08-08T04:50:16.168327",
+      "resolution_type": "new_fact",
+      "history": []
+    },
+    "customer_1_occupation": {
+      "current_value": "Customer 1 is a farmer",
+      "version": 1,
+      "last_updated": "2026-08-08T05:00:39.343573",
+      "resolution_type": "new_fact",
+      "history": []
+    }
   },
   "episodic_events": [
     {
-      "summary": "user asked about their identity",
-      "context": "user identity",
-      "outcome": "identified user"
+      "timestamp": "2026-08-08T04:49:05.771248",
+      "summary": "Customer 1 is allergic to SPR-3001",
+      "context": "Customer 1 is allergic to SPR-3001",
+      "outcome": null,
+      "consolidated": true
     },
     {
-      "summary": "tractor 4 broke its axle",
-      "context": null,
-      "outcome": null
+      "timestamp": "2026-08-08T04:49:06.693701",
+      "summary": "Customer 1 is allergic to SPR-3001",
+      "context": "Thank you for letting me know that Customer 1 is allergic to SPR-3001. I will make sure to take this into consideration for any future recommendations or assistance.",
+      "outcome": null,
+      "consolidated": true
     },
     {
-      "summary": "tractor 4 broke its axle on Field 12",
-      "context": null,
-      "outcome": null
+      "timestamp": "2026-08-08T04:49:43.248119",
+      "summary": "Equipment IDs mentioned: TRC-2001, SPR-3001, and 8. Chemical mentioned: Glyphosate.",
+      "context": "Retrieved Knowledge:\n=== MANUAL 004: TRACTOR UTILITY MAN-004 ===\nProtocol Code: SOP-CHEM-1000\nEquipment ID: 8\nGeneral maintenance protocol for heavy utility tractors. Always check oil levels before operation. Keep distance from main gates.\n---\n[DOC_ID: MAN_002]\nEquipment: TRC-2001 (Tractor)\nOperating Guidelines:\nOptimal tilling speed is 8 km/h. Fuel consumption increases significantly above 2200 RPM.\nSoil Conditions: Do not operate on fields with clay moisture exceeding 35% to prevent soil compaction.\n---\n[DOC_ID: MAN_001]\nEquipment: SPR-3001 (Sprayer)\nOperating Guidelines:\nFor spray jobs carrying restricted chemicals (such as Glyphosate), maximum speed must not exceed 12 km/h.\nBuffer zones: Minimum 15 meters from any canal or irrigation channel for restricted class chemicals.\nMaintenance: Nozzle inspection required every 50 operating hours.",
+      "outcome": null,
+      "consolidated": true
     },
     {
-      "summary": null,
-      "context": null,
-      "outcome": null
+      "timestamp": "2026-08-08T04:49:44.338547",
+      "summary": "User is allergic to SPR-3001",
+      "context": "User is allergic to SPR-3001 and needs information on equipment usage",
+      "outcome": null,
+      "consolidated": true
     },
     {
-      "summary": null,
-      "context": null,
-      "outcome": null
+      "timestamp": "2026-08-08T04:50:14.525394",
+      "summary": "Abdo manages a customer",
+      "context": "human: i am abdo i manges that customer",
+      "outcome": null,
+      "consolidated": true
     },
     {
-      "summary": null,
-      "context": null,
-      "outcome": null
+      "timestamp": "2026-08-08T04:50:15.710104",
+      "summary": "Customer 1 is managed by Abdo and is allergic to SPR-3001",
+      "context": "Hello Abdo, thank you for managing Customer 1's account. I've taken note of Customer 1's allergy to SPR-3001 for future reference.",
+      "outcome": null,
+      "consolidated": true
     },
     {
-      "summary": "Tractor 4 broke its axle on Field 12 while harvesting corn",
-      "context": null,
-      "outcome": "Incident logged"
+      "timestamp": "2026-08-08T05:00:37.152817",
+      "summary": "User inquired about restricted chemicals near irrigation channels",
+      "context": "What are the maximum operating speed and buffer zone requirements when applying restricted chemicals near irrigation channels?",
+      "outcome": null,
+      "consolidated": true
     },
     {
-      "summary": null,
-      "context": null,
-      "outcome": null
-    },
-    {
-      "summary": "tractor 4 broke its axle",
-      "context": "harvesting incident",
-      "outcome": "towed back to main barn"
-    },
-    {
-      "summary": null,
-      "context": null,
-      "outcome": null
+      "timestamp": "2026-08-08T05:00:38.259492",
+      "summary": "User is searching for maximum operating speed and buffer zone requirements for restricted chemicals near irrigation channels",
+      "context": "The user is asking about operating speeds and buffer zones for restricted chemicals, so I need to search agricultural knowledge first. Input: {'query': 'maximum operating speed and buffer zone requirements for restricted chemicals near irrigation channels'}",
+      "outcome": null,
+      "consolidated": true
     }
   ]
 }

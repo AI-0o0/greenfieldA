@@ -3,6 +3,7 @@ import sys
 
 from agent.agent import agent_step
 from memory.memory import ShortTermMemory, LongTermMemory
+from memory.consolidation import SemanticConsolidator
 from client.client import create_client 
 
 
@@ -11,7 +12,9 @@ MODE = sys.argv[1] if len(sys.argv) > 1 else "stdio"
 
 # Initialize long-term and short-term memory
 long_term = LongTermMemory()
-memory = ShortTermMemory(max_turns=20, long_term_memory=long_term)
+memory = ShortTermMemory(max_turns=2, long_term_memory=long_term)
+# Initialize the semantic consolidator
+consolidator = SemanticConsolidator(long_term)
 
 async def main():
     async with create_client(mode="stdio") as client:
@@ -23,11 +26,8 @@ async def main():
         print("Type 'exit' to quit")
         print("===================================\n")
 
-        user_id = "default_user"
-
         while True:
             try:
-                # Non-blocking input to allow asyncio event loop processing
                 user_input = await asyncio.to_thread(input, "User: ")
                 user_input = user_input.strip()
             except (KeyboardInterrupt, EOFError):
@@ -53,11 +53,20 @@ async def main():
 
             # Output the agent's answer if a terminal state was reached
             if step.action == "final_answer":
-                answer = step.action_input.get("answer") if isinstance(step.action_input, dict) else step.action_input
+                answer = None
+                if isinstance(step.action_input, dict):
+                    answer = step.action_input.get("answer")
+                if not answer and hasattr(step, "final_answer"):
+                    answer = step.final_answer
+                if not answer:
+                    answer = str(step.action_input or "Task completed.")
+
                 print(f"Agent: {answer}\n")
-            elif step.action == "escalate":
-                print("Agent: Escalating this issue to a human support representative.\n")
-            
+
+            # --- RUN PERIODIC SEMANTIC CONSOLIDATION PASS ---
+            # Automatically check and process unconsolidated episodic events after each interaction turn
+            consolidator.run_consolidation_pass()
+
             if step.action in ("end_conversation", "escalate"):
                 print("Conversation ended.")
                 break
