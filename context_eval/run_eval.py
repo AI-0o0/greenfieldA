@@ -74,14 +74,13 @@ def build_transcript(
 # Fixed test set — do not change once evaluation starts.
 TEST_CASES = [
     {
-        "id": "TC1_waterway_buffer",
+        "id": "TC1_arbitrary_hold",
         "critical_fact": (
-            "Note for the record: field 2 borders an irrigation canal, so any spray "
-            "job on field 2 needs an extra buffer zone regardless of chemical type."
+            "Heads up — equipment 4 is being held back from all jobs this week per "
+            "a note from the ops manager, unrelated to any mechanical issue."
         ),
-        "final_question": "Can we go ahead and spray field 2 with chemical 3 today, "
-                           "or is there anything I should flag first?",
-        "expected_keywords": ["buffer", "canal", "irrigation"],
+        "final_question": "We need to dispatch a sprayer for a job today — is equipment 4 available?",
+        "expected_keywords": ["held", "hold", "week", "manager"],
     },
     {
         "id": "TC2_equipment_history",
