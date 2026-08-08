@@ -4,7 +4,7 @@ from langchain.chat_models import init_chat_model
 
 class MemoryRoutingDecision(BaseModel):
     reasoning: str
-    destination: Literal["forget", "episodic", "semantic"]
+    destination: Literal["forget", "episodic"]
     # populated if destination == "episodic"
     event_summary: Optional[str] = None
     context: Optional[str] = None
