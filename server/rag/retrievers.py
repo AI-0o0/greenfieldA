@@ -7,9 +7,16 @@ load_dotenv()
 llm = init_chat_model(model="llama-3.3-70b-versatile", model_provider="groq")
 
 # 1. Naive RAG
-def naive_rag_search(query: str, top_k: int = 3) -> list[str]:
+def naive_rag_search(query: str, top_k: int = 3, source_doc: str = None) -> list[str]:
     query_vector = get_embedding(query)
-    results = collection.query(query_embeddings=[query_vector], n_results=top_k)
+    # Apply metadata pre-filtering
+    where_clause = {"source": source_doc} if source_doc else None
+    
+    results = collection.query(
+        query_embeddings=[query_vector], 
+        n_results=top_k,
+        where=where_clause
+    )
     return results["documents"][0] if results["documents"] else []
 
 # 2. Hybrid Search (Vector + BM25 Keyword Search)

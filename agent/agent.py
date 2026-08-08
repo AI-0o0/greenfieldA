@@ -96,6 +96,11 @@ async def agent_step(client, memory: ShortTermMemory, user_input: str) -> Option
     # Extract semantic facts and recent episodic events
     semantic_context = ""
     if hasattr(memory, "long_term"):
+
+        active_facts = list(memory.long_term.get_active_facts().values())
+        v_mem = self_rag_verify(user_input, active_facts, user_input)
+        if v_mem.is_relevant:
+            semantic_context += "\nVerified Known Facts:\n" + "\n".join([f"- {f}" for f in active_facts]) + "\n"
         if memory.long_term.semantic_facts:
             facts_list = [f"- {k}: {v}" for k, v in memory.long_term.semantic_facts.items()]
             semantic_context += "\nKnown Facts:\n" + "\n".join(facts_list) + "\n"
