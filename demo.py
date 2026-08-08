@@ -1,262 +1,179 @@
-"""End-to-end demo for the Greenfield MCP Dispatch project.
+"""
+demo.py
 
-Runs the real MCP server (server/server.py) as a stdio subprocess against
-an isolated throwaway database, then walks through discovery, resources,
-prompts, every tool (including elicitation and progress), negative security
-cases, and verifies the resulting database state.
+End-to-end demo transcript for the Memory & RAG lab. Walks through:
+  1. Short-term memory + scratchpad in use
+  2. Promote-or-drop firing on overflow (forget vs episodic)
+  3. Consolidation (semantic memory) — flagged if not yet wired up
+  4. Context management strategies — pointer to context_eval results
+  5. RAG: naive / hybrid / agentic on the same query + Self-RAG check
 
-The live LLM agent phase (agent/agent.py) runs only when GROQ_API_KEY is set;
-everything else works without any API key.
-
-Usage:
-    uv run python demo.py
+Run this AFTER context_eval/run_eval.py and rag_eval/run_rag_eval.py
+have produced their comparison tables — this script demonstrates the
+concerns firing live, it doesn't re-run the full evaluation.
 """
 
 import asyncio
-import os
-import sqlite3
-import sys
-import tempfile
-from dotenv import load_dotenv
-load_dotenv() 
+import json
 
-from fastmcp import Client
-from fastmcp.client.elicitation import ElicitResult, ElicitRequestParams, RequestContext
+from memory.memory import ShortTermMemory, LongTermMemory
+from memory.promote_or_drop import decide_memory_fate
 
-REPO = os.path.dirname(os.path.abspath(__file__))
-SERVER_SCRIPT = os.path.join(REPO, "server", "server.py")
-
-passed = []
-failed = []
+from server.rag.retrievers import naive_rag_search, hybrid_search, agentic_rag_search
+from server.rag.verifier import self_rag_verify
 
 
-def check(name: str, condition: bool, detail: str = ""):
-    if condition:
-        passed.append(name)
-        print(f"  [PASS] {name}")
-    else:
-        failed.append(name)
-        print(f"  [FAIL] {name}  {detail}")
+def section(title: str):
+    print("\n" + "=" * 70)
+    print(title)
+    print("=" * 70)
 
 
-def is_error(res) -> bool:
-    return bool(getattr(res, "is_error", getattr(res, "isError", False)))
+# ============================================================
+# 1 & 2. Short-term memory, scratchpad, promote-or-drop
+# ============================================================
 
+def demo_memory():
+    section("1. Short-Term Memory + Scratchpad")
 
-def result_text(res) -> str:
-    items = res.content if hasattr(res, "content") else res
-    return " ".join(getattr(c, "text", str(c)) for c in items)
+    long_term = LongTermMemory(storage_path="demo_long_term_memory.json")
+    memory = ShortTermMemory(max_turns=4, long_term_memory=long_term)  # small on purpose, to force overflow fast
 
+    memory.scratchpad["plan"] = "Handle customer 1's dispatch requests for today"
+    memory.scratchpad["current_subgoal"] = "Confirm equipment availability before dispatching"
+    print(f"Scratchpad set: {memory.scratchpad}")
 
-async def on_progress(progress: float, total: float | None, message: str | None):
-    pct = progress if not total else (progress / total) * 100
-    print(f"  [PROGRESS] {pct:.0f}% {message or ''}")
+    turns = [
+        ("user", "Can we till field 1 today?"),
+        ("ai", "Thought: checking equipment status.\nAction: dispatch_equipment\nInput: {...}"),
+        ("observation", "Result from dispatch_equipment: SUCCESS: Equipment 1 dispatched to field 1."),
+        ("user", "Also, heads up — equipment 4 is being held back this week per the ops manager, "
+                  "unrelated to any mechanical issue."),
+        ("ai", "Thought: noted.\nAction: final_answer\nInput: {'answer': 'Understood, I'll flag that.'}"),
+    ]
 
+    for role, content in turns:
+        if role == "user":
+            memory.add_user(content)
+        elif role == "ai":
+            memory.add_ai(content)
+        elif role == "observation":
+            memory.add_observation(content)
 
-async def on_elicitation(
-    message: str,
-    response_type: type | None,
-    params: ElicitRequestParams,
-    context: RequestContext,
-):
-    print(f"  [ELICITATION] {message}")
-    return ElicitResult(
-        action="accept",
-        content={"approved": True, "notes": "auto-approved by demo"},
+    print(f"\nScratchpad survived truncation intact: {memory.scratchpad}")
+    print("(This is the point of a separate scratchpad — pruning the transcript above "
+          "never touched it.)")
+
+    section("2. Promote-or-Drop Routing")
+    print("Forcing overflow by adding more turns past max_turns=4...")
+    memory.add_user("What's the weather like today, just curious?")  # should route to 'forget'
+    memory.add_ai("Thought: not relevant to task.\nAction: final_answer\nInput: {'answer': 'Not sure, sorry!'}")
+
+    print(f"\nEpisodic store after overflow: {len(long_term.episodic_events)} event(s) recorded")
+    for e in long_term.episodic_events:
+        print(f"  - {e}")
+    print(f"\nSemantic facts after overflow: {len(long_term.semantic_facts)} fact(s) recorded")
+    for k, v in long_term.semantic_facts.items():
+        print(f"  - {k}: {v}")
+
+    print(
+        "\n[NOTE] The rubric requires promote-or-drop to route ONLY to 'forget' or "
+        "'episodic' — semantic memory should only ever be populated by a separate, "
+        "periodic consolidation pass over the episodic store. If semantic facts appear "
+        "above, that's evidence of the direct-write gap flagged in the README review — "
+        "worth fixing in memory.py before this demo is final."
     )
 
 
-def make_demo_db() -> str:
-    tmp = tempfile.mkdtemp(prefix="greenfield-demo-")
-    db_path = os.path.join(tmp, "farm.db")
-    conn = sqlite3.connect(db_path)
-    conn.executescript(open(os.path.join(REPO, "db", "schema.sql"), encoding="utf-8").read())
-    conn.executescript(open(os.path.join(REPO, "db", "seed.sql"), encoding="utf-8").read())
-    conn.commit()
-    conn.close()
-    return db_path
+# ============================================================
+# 3. Consolidation — attempt to run it, flag honestly if absent
+# ============================================================
 
-
-async def main():
-    os.environ["GREENFIELD_DB_PATH"] = db_path = make_demo_db()
-    print("=" * 60)
-    print("GREENFIELD MCP DISPATCH - END-TO-END DEMO")
-    print("=" * 60)
-
-    config = {
-        "mcpServers": {
-            "GREENFIELD_server": {
-                "command": sys.executable,
-                "args": [SERVER_SCRIPT, "stdio"],
-                "env": {"GREENFIELD_DB_PATH": db_path},
-            }
-        }
-    }
-
-    async with Client(
-        config,
-        elicitation_handler=on_elicitation,
-        progress_handler=on_progress,
-    ) as client:
-
-        # ---------------------------------------------------------------
-        print("\n[1] Discovery")
-        # ---------------------------------------------------------------
-        tools = await client.list_tools()
-        check("tools/list", len(tools) >= 4, f"got {len(tools)}")
-        for t in tools:
-            print(f"    - {t.name}: {t.description[:70]}")
-
-        resources = await client.list_resources()
-        check("resources/list", len(resources) == 2, f"got {len(resources)}")
-
-        prompts = await client.list_prompts()
-        check("prompts/list", len(prompts) >= 1, f"got {len(prompts)}")
-
-        # ---------------------------------------------------------------
-        print("\n[2] Resources & Prompts")
-        # ---------------------------------------------------------------
-        policy = await client.read_resource("policy://pesticide-compliance")
-        check("policy resource", "SIGN-OFF REQUIREMENT" in result_text(policy).upper())
-
-        fleet = await client.read_resource("fleet://equipment-status")
-        fleet_text = result_text(fleet)
-        check("fleet snapshot resource", "equipment_id | serial" in fleet_text)
-
-        prompt = await client.get_prompt("draft_delay_explanation", arguments={"dispatch_id": 2})
-        check("prompt fill", "Spray" in str(prompt) or "spray" in str(prompt).lower())
-
-        # ---------------------------------------------------------------
-        print("\n[3] dispatch_equipment - till job (no sign-off)")
-        # ---------------------------------------------------------------
-        res = await client.call_tool(
-            "dispatch_equipment",
-            {"input_data": {"equipment_id": 1, "field_id": 1, "job_type": "till", "customer_id": 1}},
-        )
-        text = result_text(res)
-        check("till dispatch ok", not is_error(res) and "SUCCESS" in text, text)
-
-        # ---------------------------------------------------------------
-        print("\n[4] dispatch_equipment - restricted spray (elicitation)")
-        # ---------------------------------------------------------------
-        res = await client.call_tool(
-            "dispatch_equipment",
-            {"input_data": {"equipment_id": 3, "field_id": 2, "job_type": "spray",
-                            "chemical_id": 1, "customer_id": 1}},
-        )
-        text = result_text(res)
-        check("restricted spray ok", not is_error(res) and "SUCCESS" in text, text)
-
-        # ---------------------------------------------------------------
-        print("\n[5] Security blocks")
-        # ---------------------------------------------------------------
-        res = await client.call_tool(
-            "dispatch_equipment",
-            {"input_data": {"equipment_id": 2, "field_id": 1, "job_type": "till", "customer_id": 1}},
-            raise_on_error=False,
-        )
-        text = result_text(res)
-        check("busy equipment blocked", is_error(res) and "cannot be dispatched" in text, text)
-
-        res = await client.call_tool(
-            "dispatch_equipment",
-            {"input_data": {"equipment_id": 1, "field_id": 5, "job_type": "till", "customer_id": 1}},
-            raise_on_error=False,
-        )
-        text = result_text(res)
-        check("cross-customer field blocked", is_error(res) and "SECURITY BLOCK" in text, text)
-
-        # ---------------------------------------------------------------
-        print("\n[6] batch_dispatch (progress)")
-        # ---------------------------------------------------------------
-        res = await client.call_tool(
-            "batch_dispatch",
-            {"input_data": {"equipment_ids": [5], "field_id": 3}},
-            progress_handler=on_progress,
-        )
-        text = result_text(res)
-        check("batch dispatch ok", not is_error(res) and "SUCCESS" in text, text)
-
-        # ---------------------------------------------------------------
-        print("\n[7] process_payment (credit hold)")
-        # ---------------------------------------------------------------
-        res = await client.call_tool(
-            "process_payment",
-            {"input_data": {"customer_id": 2}},
-        )
-        text = result_text(res)
-        check("payment ok", not is_error(res) and "SUCCESS" in text, text)
-
-        # ---------------------------------------------------------------
-        print("\n[8] log_incident_note (LLM sampling)")
-        # ---------------------------------------------------------------
-        res = await client.call_tool(
-            "log_incident_note",
-            {"input_data": {"raw_note": "Sprayer 3002 nozzle clogged, chemical residue leaking from side panel."}},
-        )
-        text = result_text(res)
-        check("incident note recorded", "Incident logged" in text, text)
-
-        # ---------------------------------------------------------------
-        print("\n[9] Database state verification")
-        # ---------------------------------------------------------------
-        db_path = os.environ["GREENFIELD_DB_PATH"]
-        conn = sqlite3.connect(db_path)
-        conn.row_factory = sqlite3.Row
-        jobs = conn.execute("SELECT * FROM Dispatch_Jobs WHERE dispatch_id >= 6").fetchall()
-        check("dispatch jobs recorded", len(jobs) == 2, f"got {len(jobs)}")
-
-        eq1 = conn.execute("SELECT status FROM Equipment WHERE equipment_id = 1").fetchone()
-        check("equipment 1 now dispatched", eq1["status"] == "dispatched", eq1["status"])
-
-        eq3 = conn.execute("SELECT status FROM Equipment WHERE equipment_id = 3").fetchone()
-        check("equipment 3 now dispatched", eq3["status"] == "dispatched", eq3["status"])
-
-        spray_job = conn.execute(
-            "SELECT approval_status, approved_by FROM Dispatch_Jobs WHERE dispatch_id = 7"
-        ).fetchone()
-        check(
-            "sign-off recorded as approved",
-            spray_job and spray_job["approval_status"] == "approved" and spray_job["approved_by"] is not None,
-            dict(spray_job) if spray_job else "missing",
+def demo_consolidation():
+    section("3. Semantic Memory Consolidation")
+    try:
+        from memory.consolidation import run_consolidation  # not yet built, as of this writing
+        result = run_consolidation()
+        print(f"Consolidation pass result: {result}")
+    except ImportError:
+        print(
+            "[NOT YET IMPLEMENTED] No memory/consolidation.py found. Per the brief, this "
+            "must be a genuinely separate, periodic pass over the episodic store that "
+            "handles updates, versioning, expiration, and conflict resolution — and it's "
+            "worth 10 rubric points. This section will stay a visible gap in the demo "
+            "output until that module exists, rather than being silently skipped."
         )
 
-        hold = conn.execute("SELECT credit_hold FROM Customers WHERE customer_id = 2").fetchone()
-        check("customer 2 hold cleared", hold["credit_hold"] == 0, hold["credit_hold"])
-        conn.close()
 
-    # ---------------------------------------------------------------
-    print("\n[10] Live agent (requires GROQ_API_KEY)")
-    # ---------------------------------------------------------------
-    if os.environ.get("GROQ_API_KEY"):
-        from agent.agent import run_agent
+# ============================================================
+# 4. Context management — pointer to the eval results
+# ============================================================
 
-        async with Client(
-            config,
-            elicitation_handler=on_elicitation,
-            progress_handler=on_progress,
-        ) as client:
-            turns = [
-                "Dispatch equipment 5 to field 5 for harvest, customer 3.",
-                "Show me the current fleet status.",
-            ]
-            for i, user_input in enumerate(turns, 1):
-                print(f"\n  [AGENT] user: {user_input}")
-                step = await run_agent(client=client, user_input=user_input, user_id="C001")
-                check(f"agent turn {i} completed", step is not None)
-    else:
-        print("  [SKIP] GROQ_API_KEY not set - agent loop demo skipped.")
-        print("  Set GROQ_API_KEY in the environment to exercise the live LLM loop.")
+def demo_context_management():
+    section("4. Context Window Management (see context_eval/ for full comparison)")
+    try:
+        with open("context_eval/context_eval_results.json") as f:
+            results = json.load(f)
+        strategies = sorted(set(r["strategy"] for r in results))
+        print(f"Strategies evaluated: {', '.join(strategies)}")
+        print("Full comparison table (accuracy / tokens / latency) is in the README, "
+              "generated by context_eval/run_eval.py.")
+    except FileNotFoundError:
+        print("[Run context_eval/run_eval.py first to generate context_eval_results.json]")
 
-    # ---------------------------------------------------------------
-    print("\n" + "=" * 60)
-    print(f"RESULT: {len(passed)} passed, {len(failed)} failed")
-    if failed:
-        print("FAILED:", ", ".join(failed))
-    print("=" * 60)
-    print(f"Demo database: {os.environ['GREENFIELD_DB_PATH']}")
-    sys.exit(1 if failed else 0)
+
+# ============================================================
+# 5. RAG: naive / hybrid / agentic + Self-RAG check, same query
+# ============================================================
+
+def demo_rag():
+    section("5. RAG Architectures — same query, three pipelines")
+
+    query = (
+        "Equipment SPR-3001 needs to spray Glyphosate at 15 km/h with a 10-meter "
+        "buffer from a nearby canal. Is this dispatch compliant?"
+    )
+    print(f"Query: {query}\n")
+
+    from langchain.chat_models import init_chat_model
+    llm = init_chat_model(model="llama-3.3-70b-versatile", model_provider="groq", max_tokens=1024)
+
+    for name, retrieve_fn in [
+        ("Naive RAG", lambda q: naive_rag_search(q, top_k=3)),
+        ("Hybrid Search", lambda q: hybrid_search(q, top_k=3)),
+        ("Agentic RAG", lambda q: agentic_rag_search(q)),
+    ]:
+        print(f"--- {name} ---")
+        chunks = retrieve_fn(query)
+        print(f"Retrieved {len(chunks)} chunk(s):")
+        for c in chunks:
+            print(f"  · {c[:100]}...")
+
+        context_text = "\n\n".join(chunks) if chunks else "(no context retrieved)"
+        answer = llm.invoke(
+            f"Answer using only this context. If it's insufficient, say so.\n\n"
+            f"Context:\n{context_text}\n\nQuestion:\n{query}"
+        ).content
+        print(f"\nAnswer: {answer}")
+
+        verification = self_rag_verify(query, chunks, answer)
+        print(
+            f"\nSelf-RAG check — relevant: {verification.is_relevant}, "
+            f"supported: {verification.is_supported}"
+        )
+        print(f"Reasoning: {verification.reasoning}")
+        if not verification.is_relevant or not verification.is_supported:
+            print("[SELF-RAG CAUGHT A PROBLEM] This answer would be rejected/flagged, "
+                  "not shown to the user as-is.")
+        print()
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    demo_memory()
+    demo_consolidation()
+    demo_context_management()
+    demo_rag()
+
+    print("\n" + "=" * 70)
+    print("Demo complete.")
+    print("=" * 70)

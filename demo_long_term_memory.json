@@ -1,0 +1,10 @@
+{
+  "semantic_facts": {},
+  "episodic_events": [
+    {
+      "summary": "equipment status checked",
+      "context": "equipment status check",
+      "outcome": "equipment status checked"
+    }
+  ]
+}
