@@ -25,7 +25,7 @@ To resolve context payload bloat while maintaining 100% safety recall, we built 
 | **Recursive Summarization** | **100%** | **477** | **67** | **1.11s** | **Production Winner** (Optimal recall & token efficiency) |
 | **Observation Masking** | **100%** | 1,306 | 80 | 5.28s | High recall, but excessive token footprint & latency |
 | **Sliding Window (N=10)** | **0%** | 344 | 98 | 2.44s | Unsafe (Silently drops historical constraints) |
-| **Zone-Based Pruning** | **0%** | 415 | 74 | 2.25s | ❌ Boundary Limit (Fact fell into hard-delete zone) |
+| **Zone-Based Pruning** | **0%** | 415 | 74 | 2.25s | Boundary Limit (Fact fell into hard-delete zone) |
 
 ### Solution Integration (`agent/agent.py`)
 
