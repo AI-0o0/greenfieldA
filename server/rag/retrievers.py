@@ -1,8 +1,9 @@
 from rank_bm25 import BM25Okapi
 from langchain.chat_models import init_chat_model
-from rag.vector_store import collection, get_embedding
+from .vector_store import collection, get_embedding
+from dotenv import load_dotenv
 
-# Model for reasoning
+load_dotenv()
 llm = init_chat_model(model="llama-3.3-70b-versatile", model_provider="groq")
 
 # 1. Naive RAG

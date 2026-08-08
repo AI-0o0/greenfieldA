@@ -1,0 +1,92 @@
+[
+  {
+    "architecture": "naive_rag",
+    "query_id": "ARCH1_semantic_concept",
+    "archetype": "naive_sweet_spot",
+    "accuracy": true,
+    "self_rag_relevant": true,
+    "self_rag_supported": true,
+    "tokens": 250,
+    "latency_seconds": 1.67
+  },
+  {
+    "architecture": "hybrid_search",
+    "query_id": "ARCH1_semantic_concept",
+    "archetype": "naive_sweet_spot",
+    "accuracy": true,
+    "self_rag_relevant": true,
+    "self_rag_supported": true,
+    "tokens": 253,
+    "latency_seconds": 1.37
+  },
+  {
+    "architecture": "agentic_rag",
+    "query_id": "ARCH1_semantic_concept",
+    "archetype": "naive_sweet_spot",
+    "accuracy": true,
+    "self_rag_relevant": true,
+    "self_rag_supported": true,
+    "tokens": 181,
+    "latency_seconds": 1.84
+  },
+  {
+    "architecture": "naive_rag",
+    "query_id": "ARCH2_exact_identifier",
+    "archetype": "hybrid_sweet_spot",
+    "accuracy": true,
+    "self_rag_relevant": true,
+    "self_rag_supported": true,
+    "tokens": 224,
+    "latency_seconds": 1.02
+  },
+  {
+    "architecture": "hybrid_search",
+    "query_id": "ARCH2_exact_identifier",
+    "archetype": "hybrid_sweet_spot",
+    "accuracy": true,
+    "self_rag_relevant": true,
+    "self_rag_supported": true,
+    "tokens": 224,
+    "latency_seconds": 1.03
+  },
+  {
+    "architecture": "agentic_rag",
+    "query_id": "ARCH2_exact_identifier",
+    "archetype": "hybrid_sweet_spot",
+    "accuracy": true,
+    "self_rag_relevant": true,
+    "self_rag_supported": true,
+    "tokens": 171,
+    "latency_seconds": 1.64
+  },
+  {
+    "architecture": "naive_rag",
+    "query_id": "ARCH3_multi_part",
+    "archetype": "agentic_sweet_spot",
+    "accuracy": false,
+    "self_rag_relevant": true,
+    "self_rag_supported": false,
+    "tokens": 384,
+    "latency_seconds": 1.43
+  },
+  {
+    "architecture": "hybrid_search",
+    "query_id": "ARCH3_multi_part",
+    "archetype": "agentic_sweet_spot",
+    "accuracy": false,
+    "self_rag_relevant": true,
+    "self_rag_supported": false,
+    "tokens": 329,
+    "latency_seconds": 1.54
+  },
+  {
+    "architecture": "agentic_rag",
+    "query_id": "ARCH3_multi_part",
+    "archetype": "agentic_sweet_spot",
+    "accuracy": true,
+    "self_rag_relevant": true,
+    "self_rag_supported": false,
+    "tokens": 269,
+    "latency_seconds": 3.58
+  }
+]

@@ -16,3 +16,24 @@ Chemical Policy: Glyphosate Application
 Hazard Class: Restricted.
 Sign-off Rule: Requires explicit human sign-off before dispatching equipment when chemical_id=1.
 Emergency Protocol: If leak occurs, trigger emergency_stop immediately and file an Incident Note.
+
+
+=== MANUAL 004: TRACTOR UTILITY MAN-004 ===
+Protocol Code: SOP-CHEM-1000
+Equipment ID: 8
+General maintenance protocol for heavy utility tractors. Always check oil levels before operation. Keep distance from main gates.
+
+=== MANUAL 005: IRRIGATION PUMP MAN-005 ===
+Protocol Code: SOP-CHEM-9000
+Equipment ID: 12
+Irrigation pump operation guidelines. Ensure water inlet is free of debris. Buffer zones are not required for electrical pump units.
+
+=== MANUAL 006: SPRAYER CALIBRATION MAN-006 ===
+Protocol Code: SOP-CHEM-4040
+Equipment ID: 2
+Standard flow calibration rules. Adjust nozzle pressure to 30 PSI for liquid fertilizers. Do not mix with acid solutions.
+
+=== MANUAL 007: HARVESTER SAFETY MAN-007 ===
+Protocol Code: SOP-CHEM-8888
+Equipment ID: 91
+Safety rules for grain harvesters. Clearance height must be at least 4 meters under power lines.
