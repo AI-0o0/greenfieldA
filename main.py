@@ -5,22 +5,13 @@ import os
 from agent.agent import (
     agent_step,
     get_base_llm,
-    run_static_plan,
-    run_dynamic_plan,
     execute_subtask_with_algorithm,
 )
 from memory.memory import ShortTermMemory, LongTermMemory
 from memory.consolidation import SemanticConsolidator
 from client.client import create_client
-
-from algorithms.plan_and_solve import plan_and_solve
-from algorithms.tree_of_thought import tree_of_thoughts
-from algorithms.lats import lats, flatten_lats_tree
-from algorithms.reflexion import reflexion
-from algorithms.self_refine import reflect_and_refine, deterministic_checks
-from algorithms.environment import GreenfieldEnvironment, Environment
+from algorithms.environment import GreenfieldEnvironment
 from algorithms.decomposition import decompose_goal, execute_plan, final_output
-from algorithms.dynamic_decomposition import dynamic_decomposition
 
 
 # Parse transport mode from CLI args (default to stdio)
@@ -77,6 +68,7 @@ Type 'exit' to quit.
 async def handle_algorithm_command(user_input: str) -> bool:
     """
     Checks if the user requested a direct planning algorithm command and executes it.
+    Routes execution through the centralized execute_subtask_with_algorithm router.
     Returns True if handled, False otherwise.
     """
     cmd = user_input.strip()
@@ -112,7 +104,12 @@ async def handle_algorithm_command(user_input: str) -> bool:
         goal = cmd.split(" ", 1)[1].strip()
         print(f"\n[Running Algorithm 2: Dynamic Adaptive Decomposition for Goal]: '{goal}'")
         try:
-            history = dynamic_decomposition(goal=goal, llm=llm, max_steps=4)
+            history = await execute_subtask_with_algorithm(
+                task_instruction=goal,
+                method="dynamic_decomposition",
+                llm=llm,
+                max_steps=4,
+            )
             print(f"\nDynamic Loop Completed in {len(history)} steps:")
             for i, (task, res) in enumerate(history, 1):
                 print(f"\n[Step {i}] Next Task: {task}")
@@ -127,7 +124,11 @@ async def handle_algorithm_command(user_input: str) -> bool:
         question = cmd.split(" ", 1)[1].strip()
         print(f"\n[Running Algorithm 3: Plan-and-Solve Prompting for Question]: '{question}'")
         try:
-            output = plan_and_solve(question=question, llm=llm)
+            output = await execute_subtask_with_algorithm(
+                task_instruction=question,
+                method="plan_and_solve",
+                llm=llm,
+            )
             print(f"\n=== Plan-and-Solve Output ===\n{output}\n")
         except Exception as e:
             print(f"[Plan-and-Solve Error]: {e}\n")
@@ -138,7 +139,13 @@ async def handle_algorithm_command(user_input: str) -> bool:
         problem = cmd.split(" ", 1)[1].strip()
         print(f"\n[Running Algorithm 4: Tree-of-Thoughts Beam Search for Problem]: '{problem}'")
         try:
-            thoughts = tree_of_thoughts(problem=problem, llm=llm, depth=2, beam_width=2)
+            thoughts = await execute_subtask_with_algorithm(
+                task_instruction=problem,
+                method="tree_of_thoughts",
+                llm=llm,
+                depth=2,
+                beam_width=2,
+            )
             print(f"\nExplored {len(thoughts)} frontier thought paths:")
             for i, t in enumerate(thoughts, 1):
                 print(f"\n[Path {i}] (Score: {t.score:.2f}) Rationale: {t.rationale}")
@@ -153,7 +160,14 @@ async def handle_algorithm_command(user_input: str) -> bool:
         task = cmd.split(" ", 1)[1].strip()
         print(f"\n[Running Algorithm 5: Language Agent Tree Search (LATS) for Task]: '{task}'")
         try:
-            result = lats(task=task, llm=llm, environment=env, iterations=2, n_actions=2)
+            result = await execute_subtask_with_algorithm(
+                task_instruction=task,
+                method="lats",
+                llm=llm,
+                environment=env,
+                iterations=2,
+                n_actions=2,
+            )
             print(f"\nLATS Search Result: Success={result.success} | Best Score={result.best_score:.4f} | Iterations={result.iterations}")
             print(f"\n=== Selected Solution ===\n{result.output}\n")
         except Exception as e:
@@ -165,7 +179,14 @@ async def handle_algorithm_command(user_input: str) -> bool:
         task = cmd.split(" ", 1)[1].strip()
         print(f"\n[Running Algorithm 6: Reflexion Self-Correction Loop for Task]: '{task}'")
         try:
-            result = reflexion(task=task, llm=llm, environment=env, max_trials=3, memory_size=3)
+            result = await execute_subtask_with_algorithm(
+                task_instruction=task,
+                method="reflexion",
+                llm=llm,
+                environment=env,
+                max_trials=3,
+                memory_size=3,
+            )
             print(f"\nReflexion Search Result: Success={result.success} across {len(result.trials)} trial(s)")
             for t in result.trials:
                 print(f"\n--- Trial #{t.number} ---")
@@ -193,7 +214,12 @@ async def handle_algorithm_command(user_input: str) -> bool:
         print(f"\n[Running Algorithm 7: Self-Refine for Goal]: '{goal}'")
         print(f"Initial Draft:\n{draft}\n")
         try:
-            result = reflect_and_refine(goal=goal, draft=draft, llm=llm)
+            result = await execute_subtask_with_algorithm(
+                task_instruction=goal,
+                method="self_refine",
+                draft=draft,
+                llm=llm,
+            )
             print(f"Deterministic Grounded Checks: {result.grounded_issues or 'Passed'}")
             print(f"Critic Rubric Critique:\n{result.critique}\n")
             print(f"=== Revised & Refined Deliverable ===\n{result.revised}\n")

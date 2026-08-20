@@ -37,7 +37,9 @@ from algorithms.decomposition import decompose_goal, execute_plan, final_output
 from algorithms.dynamic_decomposition import dynamic_decomposition
 from algorithms.models import Plan, Task
 from memory.memory import ShortTermMemory, LongTermMemory
-from agent.agent import initialize_plan, run_static_plan, run_dynamic_plan
+from agent.agent import initialize_plan, execute_subtask_with_algorithm
+
+from config import MODEL_NAME, MODEL_PROVIDER
 
 load_dotenv()
 
@@ -293,17 +295,17 @@ async def execute_subtask_planning(
     llm: Optional[BaseChatModel] = None,
     environment: Optional[Environment] = None,
 ) -> Dict[str, Any]:
-    if method == "plan_and_solve":
-        return await run_plan_and_solve(task, context, llm=llm)
-    elif method == "tree_of_thought":
-        return await run_tree_of_thoughts(task, context, beam_width=3, llm=llm)
-    elif method == "lats_ungrounded":
-        env = environment or Environment(enable_domain_checks=False)
-        return await run_lats(task, context, iterations=2, llm=llm, environment=env)
-    elif method in ("lats", "lats_grounded"):
-        env = environment or GreenfieldEnvironment(enable_domain_checks=True)
-        return await run_lats(task, context, iterations=2, llm=llm, environment=env)
-    return {}
+    """Execute a sub-task using the centralized planning algorithm router."""
+    result = await execute_subtask_with_algorithm(
+        task_instruction=task,
+        method=method,
+        context=context,
+        llm=llm,
+        environment=environment,
+    )
+    if isinstance(result, dict):
+        return result
+    return {"result": result}
 
 
 # ============================================================
@@ -583,8 +585,8 @@ def main():
     print("=" * 80)
 
     llm = init_chat_model(
-        model="openai/gpt-oss-120b",
-        model_provider="groq",
+        model=MODEL_NAME,
+        model_provider=MODEL_PROVIDER,
         max_tokens=1024,
         temperature=0.1,
         max_retries=3,

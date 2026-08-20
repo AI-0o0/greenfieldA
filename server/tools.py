@@ -7,7 +7,6 @@ import sqlite3
 import jsonschema
 from typing import Literal, Optional, List
 from fastmcp import Context
-from pydantic import BaseModel, Field, ConfigDict
 
 try:
     from server.rag.retrievers import hybrid_search
@@ -15,6 +14,29 @@ try:
 except ImportError:
     from rag.retrievers import hybrid_search
     from rag.verifier import self_rag_verify
+
+try:
+    from schemas.tool_inputs import (
+        PaymentInput,
+        BatchDispatchInput,
+        IncidentInput,
+        DispatchEquipmentInput as DispatchInput,
+        KnowledgeSearchInput,
+        SignoffResponse,
+        DISPATCH_SCHEMA,
+    )
+except ImportError:
+    # Fallback when server is run directly with sys.path pointing at server/
+    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+    from schemas.tool_inputs import (
+        PaymentInput,
+        BatchDispatchInput,
+        IncidentInput,
+        DispatchEquipmentInput as DispatchInput,
+        KnowledgeSearchInput,
+        SignoffResponse,
+        DISPATCH_SCHEMA,
+    )
 
 
 def get_db_connection():
@@ -31,49 +53,6 @@ def get_db_connection():
     conn.execute("CREATE TABLE IF NOT EXISTS CHEMICALS (chemical_id INTEGER PRIMARY KEY, requires_signoff INTEGER)")
     conn.commit()
     return conn
-
-
-class PaymentInput(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    customer_id: int = Field(description="ID of the customer making the payment")
-
-
-class BatchDispatchInput(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    equipment_ids: list[int] = Field(description="List of equipment IDs to dispatch")
-    field_id: int = Field(description="The target field ID for the batch job")
-
-
-class IncidentInput(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    raw_note: str = Field(description="Unstructured incident note from the field")
-
-
-class DispatchInput(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    equipment_id: int = Field(description="ID of the equipment to dispatch")
-    field_id: int = Field(description="The target field ID")
-    job_type: Literal["till", "harvest", "spray"] = Field(description="Type of job to perform")
-    chemical_id: Optional[int] = Field(default=None, description="Required only when job_type is spray")
-    customer_id: int = Field(description="ID of the authenticated customer")
-
-
-class KnowledgeSearchInput(BaseModel):
-    model_config = ConfigDict(extra='forbid')
-    query: str = Field(description="Search query for agricultural manuals, policies, or procedures.")
-
-
-class SignoffResponse(BaseModel):
-    approved: bool = Field(description="Whether the human approves this chemical dispatch")
-    notes: str = Field(default="", description="Optional reasoning for the decision")
-
-
-PaymentInput.model_rebuild()
-BatchDispatchInput.model_rebuild()
-IncidentInput.model_rebuild()
-DispatchInput.model_rebuild()
-KnowledgeSearchInput.model_rebuild()
-SignoffResponse.model_rebuild()
 
 
 #============================================
@@ -133,18 +112,7 @@ async def log_incident_note(input_data: IncidentInput, ctx: Context) -> str:
     """Log an unstructured incident note."""
     return f"SUCCESS: Incident recorded: {input_data.raw_note}"
 
-DISPATCH_SCHEMA = {
-    "type": "object",
-    "properties": {
-        "equipment_id": {"type": "integer"},
-        "field_id": {"type": "integer"},
-        "job_type": {"type": "string", "enum": ["till", "harvest", "spray"]},
-        "chemical_id": {"type": "integer"},
-        "customer_id": {"type": "integer"}
-    },
-    "required": ["equipment_id", "field_id", "job_type", "customer_id"],
-    "additionalProperties": False
-}
+
 
 async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
     """Dispatch a piece of equipment to perform a job on a specific field."""

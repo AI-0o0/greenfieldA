@@ -1,5 +1,32 @@
+"""
+agent/schema.py
+
+Agent-specific constants (MAX_STEPS, TERMINAL_ACTIONS), the dynamic
+AgentStep model builder, and the system prompt factory.
+
+All tool-input Pydantic schemas and the ACTION_INPUT_SCHEMAS mapping
+now live in the shared ``schemas.tool_inputs`` module.
+"""
+
 from typing import Literal, Optional, List
-from pydantic import BaseModel, ConfigDict, Field, create_model
+from pydantic import BaseModel, Field, create_model
+
+# ---- Re-export shared schemas so existing callers keep working ----
+from schemas.tool_inputs import (
+    StrictInput,
+    EmptyInput,
+    FinalAnswerInput,
+    EscalationInput,
+    DispatchEquipmentInput,
+    BatchDispatchInput,
+    PaymentInput,
+    IncidentInput,
+    ReportInput,
+    KnowledgeSearchInput,
+    SignoffResponse,
+    DISPATCH_SCHEMA,
+    ACTION_INPUT_SCHEMAS,
+)
 
 MAX_STEPS = 6
 
@@ -41,71 +68,6 @@ def build_agent_step_model(action_names: List[str]):
     )
 
 
-
-# ==========================================================
-# Base Input
-# ==========================================================
-
-class StrictInput(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-
-class EmptyInput(StrictInput):
-    """Tool takes no parameters."""
-    pass
-
-
-# ==========================================================
-# Terminal Actions
-# ==========================================================
-
-class FinalAnswerInput(StrictInput):
-    answer: str = Field(
-        description="Final response shown to the user."
-    )
-
-
-class EscalationInput(StrictInput):
-    reason: str = Field(
-        description="Why the request should be escalated."
-    )
-
-
-# ==========================================================
-# Agricultural Tool Schemas
-# ==========================================================
-
-class DispatchEquipmentInput(StrictInput):
-    equipment_id: int
-    field_id: int
-    customer_id: int
-    job_type: Literal["till", "harvest", "spray"]
-    chemical_id: int | None = None
-
-
-class BatchDispatchInput(StrictInput):
-    equipment_ids: list[int]
-    field_id: int
-
-
-class PaymentInput(StrictInput):
-    customer_id: int
-
-
-class IncidentInput(StrictInput):
-    raw_note: str
-
-
-class ReportInput(StrictInput):
-    month: str
-
-
-class KnowledgeSearchInput(StrictInput):
-    query: str = Field(
-        description="Search query to lookup manuals, chemical policies, or operating procedures."
-    )
-
-
 def build_system_prompt(tool_names: List[str]) -> str:
     tool_list = "\n".join(sorted(tool_names))
     return f"""You are a constrained support agent for Greenfield Agriculture.
@@ -131,28 +93,3 @@ Strict Execution Instructions:
    - Output clean, valid JSON strings for all tool arguments and responses.
 
 Think step by step and return only the structured response."""
-
-
-# ==========================================================
-# Action → Input Schema Mapping
-# ==========================================================
-
-ACTION_INPUT_SCHEMAS = {
-    # ===== MCP Tools =====
-    "dispatch_equipment": DispatchEquipmentInput,
-    "batch_dispatch": BatchDispatchInput,
-    "process_payment": PaymentInput,
-    "log_incident_note": IncidentInput,
-    "generate_fleet_report": ReportInput,
-    "equipment_status_snapshot": EmptyInput,
-    "pesticide_compliance_policy": EmptyInput,
-    "draft_delay_explanation": EmptyInput,
-
-    # ===== RAG Tools =====
-    "search_agricultural_knowledge": KnowledgeSearchInput,
-
-    # ===== Terminal =====
-    "escalate": EscalationInput,
-    "end_conversation": FinalAnswerInput,
-    "final_answer": FinalAnswerInput,
-}

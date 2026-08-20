@@ -2,7 +2,12 @@
 archive/
 .env
 
-__pycache__/
+__pycache__/*
 
 *.pyc
 *venv/
+
+*.bin
+*.sqlite3
+
+.vscode/
