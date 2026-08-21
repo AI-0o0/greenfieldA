@@ -1,9 +1,9 @@
-from algorithms.plan_and_solve import plan_and_solve
-from algorithms.tree_of_thought import tree_of_thoughts
-from algorithms.lats import lats
-from algorithms.reflexion import reflexion
-from algorithms.self_refine import reflect_and_refine
-from algorithms.environment import Environment, GreenfieldEnvironment
+from .algorithms.plan_and_solve import plan_and_solve
+from .algorithms.tree_of_thought import tree_of_thoughts
+from .algorithms.lats import lats
+from .algorithms.reflexion import reflexion
+from .algorithms.self_refine import reflect_and_refine
+from .algorithms.environment import Environment, GreenfieldEnvironment
 
 from typing import Dict, List, Any, Optional
 from dotenv import load_dotenv
@@ -12,12 +12,12 @@ from langchain_core.messages import HumanMessage
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain.chat_models import init_chat_model
 
-from server.rag.verifier import self_rag_verify
-from memory.memory import ShortTermMemory
-from context_eval.strategies import recursive_summarization
-from algorithms.decomposition import decompose_goal, execute_plan, final_output
-from algorithms.dynamic_decomposition import dynamic_decomposition
-from algorithms.models import Plan
+from rag.verifier import self_rag_verify
+from .memory.memory import ShortTermMemory
+from .context import recursive_summarization
+from .algorithms.decomposition import decompose_goal, execute_plan, final_output
+from .algorithms.dynamic_decomposition import dynamic_decomposition
+from .algorithms.models import Plan
 
 from config import MODEL_NAME, MODEL_PROVIDER
 from .schema import (

@@ -9,7 +9,7 @@ from fastmcp.client.elicitation import ElicitResult, ElicitRequestParams, Reques
 
 
 path_to_mcp_server = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../server/server.py")
+    os.path.join(os.path.dirname(__file__), "..", "mcp_server", "server.py")
 )
 
 mode = sys.argv[1] if len(sys.argv) > 1 else "stdio"

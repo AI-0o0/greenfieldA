@@ -1,0 +1,27 @@
+{
+  "semantic_facts": {
+    "test_phrase": {
+      "current_value": "this is a test",
+      "version": 1,
+      "last_updated": "2026-08-20T12:42:21.771788",
+      "resolution_type": "new_fact",
+      "history": []
+    }
+  },
+  "episodic_events": [
+    {
+      "timestamp": "2026-08-20T12:41:26.516063",
+      "summary": "human requests adding something to semantic memory (test)",
+      "context": "human: add something to the semantice memory this is a test",
+      "outcome": null,
+      "consolidated": true
+    },
+    {
+      "timestamp": "2026-08-20T12:41:28.937262",
+      "summary": "Added phrase \"this is a test\" to semantic memory.",
+      "context": "ai: Thought: Parsed the user's request to add the phrase \"this is a test\" to semantic memory and confirmed the addition.\nAction: final_answer\nInput: {'answer': 'Added to semantic memory: \"this is a test\".'}",
+      "outcome": null,
+      "consolidated": true
+    }
+  ]
+}

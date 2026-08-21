@@ -18,11 +18,11 @@ from typing import List, Callable
 
 from langchain.chat_models import init_chat_model
 
-sys.path.append(str(Path(__file__).resolve().parent.parent))
-from server.rag.retrievers import naive_rag_search, hybrid_search, agentic_rag_search
-from server.rag.verifier import self_rag_verify
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+from rag.retrievers import naive_rag_search, hybrid_search, agentic_rag_search
+from rag.verifier import self_rag_verify
 
-from config import MODEL_NAME , MODEL_PROVIDER
+from config import MODEL_NAME, MODEL_PROVIDER
 
 llm = init_chat_model(model=MODEL_NAME, model_provider=MODEL_PROVIDER, max_tokens=1024)
 
@@ -174,5 +174,7 @@ if __name__ == "__main__":
     all_results = run_all()
     print_comparison_table(all_results)
 
-    with open("rag_eval_results.json", "w") as f:
+    output_dir = Path(__file__).resolve().parent.parent / "results" / "rag"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with open(output_dir / "rag_eval_results.json", "w", encoding="utf-8") as f:
         json.dump([r.__dict__ for r in all_results], f, indent=2)

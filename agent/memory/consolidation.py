@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import List, Dict, Any, Optional
 from pydantic import BaseModel, Field
 from langchain.chat_models import init_chat_model
-from memory.memory import LongTermMemory
+from .memory import LongTermMemory
 from config import MODEL_NAME, MODEL_PROVIDER
 class FactUpdate(BaseModel):
     fact_key: str = Field(description="Unique snake_case identifier (e.g. 'customer_1_buffer_rule')")

@@ -8,7 +8,7 @@ from langchain_core.messages import (
     SystemMessage,
     BaseMessage,
 )
-from memory.promote_or_drop import MemoryRoutingDecision, decide_memory_fate
+from .promote_or_drop import MemoryRoutingDecision, decide_memory_fate
 
 
 class LongTermMemory:

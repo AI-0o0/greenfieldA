@@ -8,40 +8,22 @@ import jsonschema
 from typing import Literal, Optional, List
 from fastmcp import Context
 
-try:
-    from server.rag.retrievers import hybrid_search
-    from server.rag.verifier import self_rag_verify
-except ImportError:
-    from rag.retrievers import hybrid_search
-    from rag.verifier import self_rag_verify
-
-try:
-    from schemas.tool_inputs import (
-        PaymentInput,
-        BatchDispatchInput,
-        IncidentInput,
-        DispatchEquipmentInput as DispatchInput,
-        KnowledgeSearchInput,
-        SignoffResponse,
-        DISPATCH_SCHEMA,
-    )
-except ImportError:
-    # Fallback when server is run directly with sys.path pointing at server/
-    sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-    from schemas.tool_inputs import (
-        PaymentInput,
-        BatchDispatchInput,
-        IncidentInput,
-        DispatchEquipmentInput as DispatchInput,
-        KnowledgeSearchInput,
-        SignoffResponse,
-        DISPATCH_SCHEMA,
-    )
+from rag.retrievers import hybrid_search
+from rag.verifier import self_rag_verify
+from schemas.tool_inputs import (
+    PaymentInput,
+    BatchDispatchInput,
+    IncidentInput,
+    DispatchEquipmentInput as DispatchInput,
+    KnowledgeSearchInput,
+    SignoffResponse,
+    DISPATCH_SCHEMA,
+)
 
 
 def get_db_connection():
     # Fallback path creation if db folder is missing
-    db_dir = os.path.join(os.path.dirname(__file__), "..", "db")
+    db_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "db"))
     os.makedirs(db_dir, exist_ok=True)
     db_path = os.environ.get("GREENFIELD_DB_PATH") or os.path.join(db_dir, "farm.db")
     

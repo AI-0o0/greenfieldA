@@ -1,0 +1,38 @@
+{
+  "benchmark": "Sub-task planning algorithms: ranking evaluation (15 cases)",
+  "rows": [
+    {
+      "method": "Plan-and-Solve (ranking)",
+      "subtask_success": "11/15",
+      "avg_calls": "1",
+      "avg_tokens": "1,400",
+      "avg_latency": "0.9s",
+      "est_cost": "$0.01"
+    },
+    {
+      "method": "Tree of Thoughts (ranking)",
+      "subtask_success": "14/15",
+      "avg_calls": "9",
+      "avg_tokens": "5,200",
+      "avg_latency": "3.8s",
+      "est_cost": "$0.04"
+    },
+    {
+      "method": "LATS, ungrounded env. (toolkit default)",
+      "subtask_success": "9/15",
+      "avg_calls": "11",
+      "avg_tokens": "7,600",
+      "avg_latency": "6.2s",
+      "est_cost": "$0.06"
+    },
+    {
+      "method": "LATS, grounded env. (real conflict validator)",
+      "subtask_success": "14/15",
+      "avg_calls": "13",
+      "avg_tokens": "8,300",
+      "avg_latency": "6.9s",
+      "est_cost": "$0.07"
+    }
+  ],
+  "conclusion": "Tree-of-Thoughts clearly beats Plan-and-Solve on the ranking sub-task for overall rate; on the ranking, LATS with grounded environment matches Tree of Thoughts while generating deeper exploration trajectories."
+}

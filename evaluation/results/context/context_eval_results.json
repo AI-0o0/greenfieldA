@@ -4,63 +4,63 @@
     "test_id": "TC1_arbitrary_hold",
     "recalled_correctly": false,
     "input_tokens": 342,
-    "output_tokens": 66,
-    "latency_seconds": 0.87
+    "output_tokens": 67,
+    "latency_seconds": 2.18
   },
   {
     "strategy": "observation_masking",
     "test_id": "TC1_arbitrary_hold",
     "recalled_correctly": true,
     "input_tokens": 1303,
-    "output_tokens": 69,
-    "latency_seconds": 0.94
+    "output_tokens": 85,
+    "latency_seconds": 1.15
   },
   {
     "strategy": "recursive_summarization",
     "test_id": "TC1_arbitrary_hold",
     "recalled_correctly": true,
-    "input_tokens": 452,
-    "output_tokens": 56,
-    "latency_seconds": 0.51
+    "input_tokens": 894,
+    "output_tokens": 178,
+    "latency_seconds": 0.85
   },
   {
     "strategy": "zone_based_pruning",
     "test_id": "TC1_arbitrary_hold",
     "recalled_correctly": false,
-    "input_tokens": 398,
-    "output_tokens": 30,
-    "latency_seconds": 0.51
+    "input_tokens": 524,
+    "output_tokens": 56,
+    "latency_seconds": 2.47
   },
   {
     "strategy": "sliding_window",
     "test_id": "TC2_equipment_history",
-    "recalled_correctly": false,
+    "recalled_correctly": true,
     "input_tokens": 347,
-    "output_tokens": 130,
-    "latency_seconds": 4.0
+    "output_tokens": 825,
+    "latency_seconds": 5.92
   },
   {
     "strategy": "observation_masking",
     "test_id": "TC2_equipment_history",
     "recalled_correctly": true,
     "input_tokens": 1310,
-    "output_tokens": 91,
-    "latency_seconds": 9.62
+    "output_tokens": 302,
+    "latency_seconds": 17.56
   },
   {
     "strategy": "recursive_summarization",
     "test_id": "TC2_equipment_history",
     "recalled_correctly": true,
-    "input_tokens": 502,
-    "output_tokens": 78,
-    "latency_seconds": 1.72
+    "input_tokens": 815,
+    "output_tokens": 480,
+    "latency_seconds": 19.63
   },
   {
     "strategy": "zone_based_pruning",
     "test_id": "TC2_equipment_history",
     "recalled_correctly": false,
-    "input_tokens": 432,
-    "output_tokens": 117,
-    "latency_seconds": 3.99
+    "input_tokens": 493,
+    "output_tokens": 92,
+    "latency_seconds": 9.24
   }
 ]

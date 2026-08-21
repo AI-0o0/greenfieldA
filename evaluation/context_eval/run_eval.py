@@ -13,15 +13,19 @@ guardrail).
 
 import time
 import json
+import sys
+from pathlib import Path
 from dataclasses import dataclass, field
 from typing import List, Callable
 from dotenv import load_dotenv
 
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
+
 from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
-from config import MODEL_NAME , MODEL_PROVIDER
+from config import MODEL_NAME, MODEL_PROVIDER
 
-from strategies import (
+from agent.context import (
     sliding_window,
     observation_masking,
     recursive_summarization,
@@ -198,5 +202,7 @@ if __name__ == "__main__":
     all_results = run_all()
     print_comparison_table(all_results)
 
-    with open("context_eval_results.json", "w") as f:
+    output_dir = Path(__file__).resolve().parent.parent / "results" / "context"
+    output_dir.mkdir(parents=True, exist_ok=True)
+    with open(output_dir / "context_eval_results.json", "w", encoding="utf-8") as f:
         json.dump([r.__dict__ for r in all_results], f, indent=2)

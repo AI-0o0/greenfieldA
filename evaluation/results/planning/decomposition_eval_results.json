@@ -1,0 +1,22 @@
+{
+  "benchmark": "Top-level decomposition: reshuffling Tuesday's board (20 real cases)",
+  "cases_evaluated": 1,
+  "results": [
+    {
+      "method": "Decomposition-first",
+      "task_success": "0/1",
+      "avg_llm_calls": "1 plan + 4 nodes",
+      "avg_tokens": 4118,
+      "avg_latency": "38.5s",
+      "est_cost_run": "$0.03"
+    },
+    {
+      "method": "Dynamic decomposition",
+      "task_success": "0/1",
+      "avg_llm_calls": "~7 (varies)",
+      "avg_tokens": 10243,
+      "avg_latency": "105.8s",
+      "est_cost_run": "$0.07"
+    }
+  ]
+}

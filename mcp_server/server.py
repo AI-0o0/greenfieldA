@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 current_dir = os.path.dirname(os.path.abspath(__file__))
-parent_dir = os.path.abspath(os.path.join(current_dir, ".."))
-if parent_dir not in sys.path:
-    sys.path.insert(0, parent_dir)
+root_dir = os.path.abspath(os.path.join(current_dir, ".."))
+if root_dir not in sys.path:
+    sys.path.insert(0, root_dir)
 if current_dir not in sys.path:
     sys.path.insert(0, current_dir)
 
@@ -20,24 +20,14 @@ from fastmcp import FastMCP
 from typing import Literal, Optional, List
 from mcp.types import ElicitRequestedSchema
 
-try:
-    from server.tools import (
-        get_db_connection,
-        search_agricultural_knowledge,
-        process_payment,
-        batch_dispatch,
-        log_incident_note,
-        dispatch_equipment,
-    )
-except ImportError:
-    from tools import (
-        get_db_connection,
-        search_agricultural_knowledge,
-        process_payment,
-        batch_dispatch,
-        log_incident_note,
-        dispatch_equipment,
-    )
+from mcp_server.tools import (
+    get_db_connection,
+    search_agricultural_knowledge,
+    process_payment,
+    batch_dispatch,
+    log_incident_note,
+    dispatch_equipment,
+)
 
 
 # Initialize FastMCP server for Greenfield

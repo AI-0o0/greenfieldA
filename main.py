@@ -7,11 +7,11 @@ from agent.agent import (
     get_base_llm,
     execute_subtask_with_algorithm,
 )
-from memory.memory import ShortTermMemory, LongTermMemory
-from memory.consolidation import SemanticConsolidator
-from client.client import create_client
-from algorithms.environment import GreenfieldEnvironment
-from algorithms.decomposition import decompose_goal, execute_plan, final_output
+from agent.memory.memory import ShortTermMemory, LongTermMemory
+from agent.memory.consolidation import SemanticConsolidator
+from mcp_client.client import create_client
+from agent.algorithms.environment import GreenfieldEnvironment
+from agent.algorithms.decomposition import decompose_goal, execute_plan, final_output
 
 
 # Parse transport mode from CLI args (default to stdio)

@@ -19,6 +19,7 @@ Includes:
 import os
 import sys
 from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 import time
 import json
 from dataclasses import dataclass, field
@@ -459,7 +460,7 @@ def print_subtask_benchmark_table(results: Optional[List[Dict[str, Any]]] = None
         ),
     }
 
-    output_dir = Path(__file__).resolve().parent / "evaluation" / "results" / "planning"
+    output_dir = Path(__file__).resolve().parent.parent / "results" / "planning"
     output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_dir / "subtask_eval_results.json", "w", encoding="utf-8") as f:
         json.dump(summary_data, f, indent=2)
@@ -572,7 +573,7 @@ def run_full_benchmark(llm: BaseChatModel, sample_size: int = 20) -> Dict[str, A
         ]
     }
 
-    output_dir = Path(__file__).resolve().parent / "evaluation" / "results" / "planning"
+    output_dir = Path(__file__).resolve().parent.parent / "results" / "planning"
     output_dir.mkdir(parents=True, exist_ok=True)
     with open(output_dir / "decomposition_eval_results.json", "w", encoding="utf-8") as f:
         json.dump(summary_data, f, indent=2)
