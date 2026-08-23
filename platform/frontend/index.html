@@ -37,6 +37,15 @@
         button:hover {
             background-color: #1e3f28;
         }
+        .btn-approve {
+            background-color: #2e7d32;
+        }
+        .btn-reject {
+            background-color: #c62828;
+        }
+        .btn-approve:hover { background-color: #1b5e20; }
+        .btn-reject:hover { background-color: #b71c1c; }
+        
         #chatArea {
             border: 1px solid #ccc;
             border-radius: 4px;
@@ -65,6 +74,13 @@
             color: #666;
             margin-bottom: 4px;
         }
+        .approval-card {
+            background-color: #fff3e0;
+            border: 1px solid #ffe0b2;
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 15px;
+        }
     </style>
 </head>
 <body>
@@ -80,6 +96,16 @@
 
     <div id="chatArea"></div>
 
+    <!-- HITL Approval Control Box -->
+    <div class="approval-card">
+        <div class="meta">HITL Workflow Controls (Equipment Repair Approval)</div>
+        <div class="controls" style="margin-top: 8px; margin-bottom: 0;">
+            <input type="text" id="threadInput" placeholder="Thread ID (e.g. test_123)" value="test_123" />
+            <button class="btn-approve" id="approveBtn">Approve Repair</button>
+            <button class="btn-reject" id="rejectBtn">Reject</button>
+        </div>
+    </div>
+
     <div class="controls" style="margin-top: 15px;">
         <input type="text" id="messageInput" placeholder="Type a message..." />
         <button id="sendBtn">Send</button>
@@ -90,6 +116,9 @@
         const messageInput = document.getElementById('messageInput');
         const agentSelect = document.getElementById('agentSelect');
         const sendBtn = document.getElementById('sendBtn');
+        const threadInput = document.getElementById('threadInput');
+        const approveBtn = document.getElementById('approveBtn');
+        const rejectBtn = document.getElementById('rejectBtn');
 
         function appendMessage(sender, text, isUser) {
             const msgDiv = document.createElement('div');
@@ -135,12 +164,41 @@
             }
         }
 
+        async function handleApproval(isApproved) {
+            const threadId = threadInput.value.trim();
+            if (!threadId) {
+                alert('Please enter a Thread ID');
+                return;
+            }
+
+            appendMessage('System', `Sending HITL Decision (${isApproved ? 'Approved' : 'Rejected'}) for Thread: ${threadId}`, true);
+
+            try {
+                const response = await fetch('/api/equipment-repair/approve', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ thread_id: threadId, approved: isApproved })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    appendMessage('LangGraph Workflow', `Execution Resumed: ${data.message || 'Success'}`, false);
+                } else {
+                    appendMessage('Error', `Approval failed: ${data.detail || 'Unknown error'}`, false);
+                }
+            } catch (err) {
+                appendMessage('Error', 'Failed to process approval: ' + err.message, false);
+            }
+        }
+
         sendBtn.addEventListener('click', sendMessage);
         messageInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                sendMessage();
-            }
+            if (e.key === 'Enter') sendMessage();
         });
+
+        approveBtn.addEventListener('click', () => handleApproval(true));
+        rejectBtn.addEventListener('click', () => handleApproval(false));
     </script>
 </body>
 </html>

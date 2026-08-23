@@ -190,4 +190,20 @@ CREATE TABLE Fleet_Reports (
 
     FOREIGN KEY (generated_by)
         REFERENCES Technicians(technician_id)
+
+);
+-- Dedicated Equipment Table for Repair Workflow
+CREATE TABLE IF NOT EXISTS repair_equipment (
+    equipment_id TEXT PRIMARY KEY,
+    equipment_name TEXT NOT NULL,
+    model TEXT NOT NULL,
+    status TEXT DEFAULT 'operational'
+);
+
+-- Spare Parts Table
+CREATE TABLE IF NOT EXISTS spare_parts (
+    part_id TEXT PRIMARY KEY,
+    part_name TEXT NOT NULL,
+    price REAL NOT NULL,
+    stock_quantity INTEGER DEFAULT 0
 );

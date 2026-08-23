@@ -19,7 +19,8 @@ from schemas.tool_inputs import (
     SignoffResponse,
     DISPATCH_SCHEMA,
 )
-
+import sqlite3
+from typing import List, Dict, Any
 
 def get_db_connection():
     # Fallback path creation if db folder is missing
@@ -231,3 +232,36 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
 
     finally:
         conn.close()
+
+def get_equipment_info(equipment_id: str) -> Dict[str, Any]:
+    """Retrieve equipment information from the database."""
+    conn = sqlite3.connect("db/farm.db")
+    cursor = conn.cursor()
+    cursor.execute("SELECT equipment_id, equipment_name, model, status FROM repair_equipment WHERE equipment_id = ?", (equipment_id,))
+    row = cursor.fetchone()
+    conn.close()
+    
+    if row:
+        return {"equipment_id": row[0], "name": row[1], "model": row[2], "status": row[3]}
+    return {"error": f"Equipment {equipment_id} not found."}
+
+def calculate_parts_cost(part_names: List[str]) -> Dict[str, Any]:
+    """Calculate total cost for a list of required spare parts from the database."""
+    conn = sqlite3.connect("db/farm.db")
+    cursor = conn.cursor()
+    
+    total_cost = 0.0
+    found_parts = []
+    
+    for name in part_names:
+        cursor.execute("SELECT part_id, part_name, price FROM spare_parts WHERE part_name LIKE ?", (f"%{name}%",))
+        row = cursor.fetchone()
+        if row:
+            total_cost += row[2]
+            found_parts.append({"part_name": row[1], "price": row[2]})
+            
+    conn.close()
+    return {
+        "total_cost": total_cost,
+        "parts": found_parts
+    }

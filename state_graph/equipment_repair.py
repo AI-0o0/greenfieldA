@@ -7,6 +7,11 @@ from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.types import interrupt
 
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).parent.parent))
+from mcp_server.tools import calculate_parts_cost
+
 # 1. Define the state schema for equipment maintenance workflow
 class EquipmentRepairState(TypedDict):
     equipment_id: str
@@ -34,8 +39,11 @@ def node_diagnose_and_rag(state: EquipmentRepairState) -> dict:
         "3. Recalibrate pump pressure."
     ]
     
-    # Calculate repair cost (In production, this is dynamically fetched from DB via MCP tool)
-    estimated_cost = 650.0  
+    needed_parts = ["Fuel Filter XL", "Injector Nozzle"]
+    
+    # Dynamically calculate total cost using MCP tool linked to DB
+    parts_cost_res = calculate_parts_cost(needed_parts)
+    estimated_cost = parts_cost_res.get("total_cost", 0.0)
     
     return {
         "manual_context": manual_info,
