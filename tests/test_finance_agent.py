@@ -8,7 +8,7 @@ HITL admin reviews, Document validation loops, Provider responses, and Farmer co
 
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
-from agent.graphs.finance import (
+from agents.graphs.finance import (
     build_finance_graph,
     create_finance_agent,
     run_finance_turn,
@@ -433,7 +433,7 @@ def test_hitl_task_queue_and_resumption():
     Tests explicit HITL policy triggers opening a task in HITL_Tasks table,
     and platform admin resolving it via resume_hitl_task.
     """
-    from agent.graphs.finance import fetch_pending_hitl_tasks, resume_hitl_task
+    from agents.graphs.finance import fetch_pending_hitl_tasks, resume_hitl_task
 
     mem = MemorySaver()
     graph = create_finance_agent(checkpointer=mem, interactive=True)
@@ -500,7 +500,7 @@ def test_ticket_system_failure_capture_and_recovery():
     Tests that an unplanned mid-node exception is safely caught, persisted into Tickets table,
     and can be resolved & resumed from the exact checkpoint without restarting from the top.
     """
-    from agent.graphs.finance import fetch_tickets, resolve_ticket_and_resume, update_ticket_status, get_ticket
+    from agents.graphs.finance import fetch_tickets, resolve_ticket_and_resume, update_ticket_status, get_ticket
 
     mem = MemorySaver()
     graph = create_finance_agent(checkpointer=mem, interactive=True)
@@ -633,7 +633,7 @@ def test_document_validation_cycle():
 
 def test_hitl_policy_evaluation_rules():
     """Tests the explicit deterministic evaluation of all 4 HITL escalation triggers."""
-    from agent.graphs.finance import evaluate_hitl_policy
+    from agents.graphs.finance import evaluate_hitl_policy
 
     # 1. Standard low-risk, small loan -> No HITL
     needed, reasons = evaluate_hitl_policy(amount=25000.0, risk="low", dscr=1.6)
@@ -666,8 +666,8 @@ def test_hitl_policy_evaluation_rules():
 # ==============================================================================
 
 def test_graphs_finance_package_exports():
-    """Ensures all public symbols are correctly exported from agent.graphs.finance."""
-    import agent.graphs.finance as finance_pkg
+    """Ensures all public symbols are correctly exported from agents.graphs.finance."""
+    import agents.graphs.finance as finance_pkg
 
     assert hasattr(finance_pkg, "create_finance_agent")
     assert hasattr(finance_pkg, "build_finance_graph")

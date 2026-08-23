@@ -1,5 +1,5 @@
 """
-agent/graphs/finance/tickets.py
+agents/graphs/finance/tickets.py
 
 Ticket-based Unplanned Mid-Node Failure Capture and Checkpoint Recovery for the
 Greenfield Autonomous Finance Graph.
@@ -18,7 +18,7 @@ import datetime
 from typing import Optional, List, Dict, Any, Literal
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from agent.graphs.finance.db import get_db_connection, serialize_state_for_db
+from agents.graphs.finance.db import get_db_connection, serialize_state_for_db
 
 
 class NodeExecutionError(Exception):
@@ -131,7 +131,7 @@ def resolve_ticket_and_resume(
         conn.commit()
 
     # Late import to avoid circular dependencies
-    from agent.graphs.finance.graph import create_finance_agent, run_finance_turn
+    from agents.graphs.finance.graph import create_finance_agent, run_finance_turn
 
     active_graph = graph or create_finance_agent(checkpointer=checkpointer, interactive=True, llm=llm, db_path=db_path)
     patch = {**state_patch, "error": None, "error_traceback": None, "failed_node": None, "ticket_id": None}

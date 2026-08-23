@@ -50,12 +50,10 @@ from agents.graphs.finance.nodes import (
     generate_options_node,
     tot_advice_node,
     rag_policies_node,
-    react_policies_node,
     generate_recommendation_node,
     financing_node,
     check_eligibility_node,
     rag_eligibility_node,
-    react_eligibility_node,
     explain_rejection_node,
     collect_documents_node,
     wait_farmer_node,
@@ -70,28 +68,6 @@ from agents.graphs.finance.nodes import (
     generate_alternatives_node,
     process_financing_node,
     verify_transaction_node,
-)
-from agents.graphs.finance.resources import (
-    SUBSIDY_PROGRAMS,
-    UNDERWRITING_RULES,
-    FINANCIAL_PRODUCTS,
-    HITL_THRESHOLDS,
-    lookup_financial_policies,
-    get_all_financial_resources,
-)
-from agents.graphs.finance.tools import (
-    lookup_policy_rules,
-    calculate_loan_quote,
-    calculate_dscr,
-    check_farmer_eligibility_covenants,
-    compare_financing_structures,
-    FINANCE_TOOL_DISPATCH,
-    FINANCE_TOOL_SCHEMAS,
-)
-from agents.graphs.finance.react_agent import (
-    run_finance_react_agent,
-    build_finance_step_model,
-    build_finance_system_prompt,
 )
 from agents.graphs.finance.graph import (
     build_finance_graph,
@@ -129,7 +105,7 @@ __all__ = [
     "update_ticket_status",
     "resolve_ticket_and_resume",
     "safe_node_execute",
-    # Nodes (including Constrained ReAct Agent nodes)
+    # Nodes
     "farmer_request_node",
     "route_request_node",
     "advice_node",
@@ -139,12 +115,10 @@ __all__ = [
     "generate_options_node",
     "tot_advice_node",
     "rag_policies_node",
-    "react_policies_node",
     "generate_recommendation_node",
     "financing_node",
     "check_eligibility_node",
     "rag_eligibility_node",
-    "react_eligibility_node",
     "explain_rejection_node",
     "collect_documents_node",
     "wait_farmer_node",
@@ -159,24 +133,6 @@ __all__ = [
     "generate_alternatives_node",
     "process_financing_node",
     "verify_transaction_node",
-    # Resources & Tools
-    "SUBSIDY_PROGRAMS",
-    "UNDERWRITING_RULES",
-    "FINANCIAL_PRODUCTS",
-    "HITL_THRESHOLDS",
-    "lookup_financial_policies",
-    "get_all_financial_resources",
-    "lookup_policy_rules",
-    "calculate_loan_quote",
-    "calculate_dscr",
-    "check_farmer_eligibility_covenants",
-    "compare_financing_structures",
-    "FINANCE_TOOL_DISPATCH",
-    "FINANCE_TOOL_SCHEMAS",
-    # ReAct Engine
-    "run_finance_react_agent",
-    "build_finance_step_model",
-    "build_finance_system_prompt",
     # Graph Engine & Execution
     "build_finance_graph",
     "create_finance_agent",

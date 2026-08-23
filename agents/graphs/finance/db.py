@@ -1,5 +1,5 @@
 """
-agent/graphs/finance/db.py
+agents/graphs/finance/db.py
 
 Database helpers, schema initialization, and persistence queries for the Greenfield
 Autonomous Finance Graph using the unified company farm.db SQLite database.

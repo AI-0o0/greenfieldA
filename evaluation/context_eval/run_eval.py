@@ -25,7 +25,7 @@ from langchain.chat_models import init_chat_model
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, BaseMessage
 from config import MODEL_NAME, MODEL_PROVIDER
 
-from agent.context import (
+from agents.context import (
     sliding_window,
     observation_masking,
     recursive_summarization,

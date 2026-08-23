@@ -1,5 +1,5 @@
 """
-agent/graphs/finance/graph.py
+agents/graphs/finance/graph.py
 
 LangGraph StateGraph assembly and turn execution engine for the Greenfield
 Autonomous Finance Agent.
@@ -18,10 +18,10 @@ from langchain_core.language_models.chat_models import BaseChatModel
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.memory import MemorySaver
 
-from agent.graphs.finance.state import FinanceState
-from agent.graphs.finance.checkpointer import get_sqlite_checkpointer
-from agent.graphs.finance.tickets import safe_node_execute, NodeExecutionError
-from agent.graphs.finance.nodes import (
+from agents.graphs.finance.state import FinanceState
+from agents.graphs.finance.checkpointer import get_sqlite_checkpointer
+from agents.graphs.finance.tickets import safe_node_execute, NodeExecutionError
+from agents.graphs.finance.nodes import (
     farmer_request_node,
     route_request_node,
     route_request_condition,

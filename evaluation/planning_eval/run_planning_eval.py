@@ -30,16 +30,16 @@ from langchain.chat_models import init_chat_model
 from langchain_core.language_models.chat_models import BaseChatModel
 
 # Planning Algorithms & Environments
-from agent.algorithms.plan_and_solve import plan_and_solve, run_plan_and_solve
-from agent.algorithms.tree_of_thought import tree_of_thoughts, run_tree_of_thoughts
-from agent.algorithms.lats import lats, run_lats
-from agent.algorithms.environment import Environment, GreenfieldEnvironment
+from agents.algorithms.plan_and_solve import plan_and_solve, run_plan_and_solve
+from agents.algorithms.tree_of_thought import tree_of_thoughts, run_tree_of_thoughts
+from agents.algorithms.lats import lats, run_lats
+from agents.algorithms.environment import Environment, GreenfieldEnvironment
 
-from agent.algorithms.decomposition import decompose_goal, execute_plan, final_output
-from agent.algorithms.dynamic_decomposition import dynamic_decomposition
-from agent.algorithms.models import Plan, Task
-from agent.memory.memory import ShortTermMemory, LongTermMemory
-from agent.agent import initialize_plan, execute_subtask_with_algorithm
+from agents.algorithms.decomposition import decompose_goal, execute_plan, final_output
+from agents.algorithms.dynamic_decomposition import dynamic_decomposition
+from agents.algorithms.models import Plan, Task
+from agents.memory.memory import ShortTermMemory, LongTermMemory
+from agents.agent import initialize_plan, execute_subtask_with_algorithm
 
 from config import MODEL_NAME, MODEL_PROVIDER
 

@@ -2,17 +2,17 @@ import asyncio
 import sys
 import os
 
-from agent.agent import (
+from agents.agent import (
     agent_step,
     get_base_llm,
     execute_subtask_with_algorithm,
 )
-from agent.memory.memory import ShortTermMemory, LongTermMemory
-from agent.memory.consolidation import SemanticConsolidator
+from agents.memory.memory import ShortTermMemory, LongTermMemory
+from agents.memory.consolidation import SemanticConsolidator
 from mcp_client.client import create_client
-from agent.algorithms.environment import GreenfieldEnvironment
-from agent.algorithms.decomposition import decompose_goal, execute_plan, final_output
-from agent.graphs.finance import (
+from agents.algorithms.environment import GreenfieldEnvironment
+from agents.algorithms.decomposition import decompose_goal, execute_plan, final_output
+from agents.graphs.finance import (
     create_finance_agent,
     run_finance_turn,
     fetch_farmer_db_profile,

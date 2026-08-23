@@ -1,5 +1,5 @@
 """
-agent/graphs/finance/nodes.py
+agents/graphs/finance/nodes.py
 
 Graph node definitions and conditional routers for the Greenfield Autonomous
 Finance StateGraph Agent.
@@ -16,12 +16,12 @@ import datetime
 from typing import Optional, List, Dict, Any, Literal
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from agent.agent import get_base_llm
-from agent.algorithms.tree_of_thought import tree_of_thoughts
+from agents.agent import get_base_llm
+from agents.algorithms.tree_of_thought import tree_of_thoughts
 from rag.retrievers import hybrid_search
 from rag.verifier import self_rag_verify
 
-from agent.graphs.finance.state import (
+from agents.graphs.finance.state import (
     FinanceState,
     RouteDecision,
     SpecialistDecision,
@@ -31,11 +31,11 @@ from agent.graphs.finance.state import (
     FinancialAnalysisResult,
     AlternativeOptionsResult,
 )
-from agent.graphs.finance.db import (
+from agents.graphs.finance.db import (
     get_db_connection,
     fetch_farmer_db_profile,
 )
-from agent.graphs.finance.hitl import (
+from agents.graphs.finance.hitl import (
     evaluate_hitl_policy,
     create_or_update_hitl_task,
 )

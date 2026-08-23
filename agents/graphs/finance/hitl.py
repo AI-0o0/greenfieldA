@@ -1,5 +1,5 @@
 """
-agent/graphs/finance/hitl.py
+agents/graphs/finance/hitl.py
 
 Human-in-the-Loop (HITL) Policy Definitions and Escalation Management for the
 Greenfield Autonomous Finance Graph.
@@ -21,7 +21,7 @@ import datetime
 from typing import Optional, List, Dict, Any, Tuple, Literal
 from langchain_core.language_models.chat_models import BaseChatModel
 
-from agent.graphs.finance.db import get_db_connection, serialize_state_for_db
+from agents.graphs.finance.db import get_db_connection, serialize_state_for_db
 
 
 def evaluate_hitl_policy(
@@ -139,7 +139,7 @@ def resume_hitl_task(
         conn.commit()
 
     # Late import to avoid circular dependencies
-    from agent.graphs.finance.graph import create_finance_agent, run_finance_turn
+    from agents.graphs.finance.graph import create_finance_agent, run_finance_turn
 
     active_graph = graph or create_finance_agent(checkpointer=checkpointer, interactive=True, llm=llm, db_path=db_path)
     update_input = {
