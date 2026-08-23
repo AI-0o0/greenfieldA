@@ -1065,8 +1065,8 @@ def hitl_condition(state: FinanceState) -> str:
 def admin_review_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
     """Node [ADMIN]: HITL Admin / Manager sign-off checkpoint."""
     log = list(state.get("execution_log", []))
-    decision = state.get("admin_decision") or "approve"
-    feedback = state.get("admin_feedback") or ""
+    decision = state.get("admin_decision")
+    feedback = state.get("admin_feedback")
     app_id = state.get("application_id")
     task_id = state.get("hitl_task_id")
 
