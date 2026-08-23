@@ -190,149 +190,20 @@ CREATE TABLE Fleet_Reports (
 
     FOREIGN KEY (generated_by)
         REFERENCES Technicians(technician_id)
+
+);
+-- Dedicated Equipment Table for Repair Workflow
+CREATE TABLE IF NOT EXISTS repair_equipment (
+    equipment_id TEXT PRIMARY KEY,
+    equipment_name TEXT NOT NULL,
+    model TEXT NOT NULL,
+    status TEXT DEFAULT 'operational'
 );
 
--- ==========================
--- Financing Applications
--- ==========================
-CREATE TABLE Financing_Applications (
-    application_id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    customer_id INTEGER NOT NULL,
-    field_id INTEGER,
-
-    requested_amount REAL NOT NULL,
-    purpose TEXT NOT NULL,
-
-    status TEXT NOT NULL DEFAULT 'pending_eligibility'
-        CHECK (
-            status IN (
-                'pending_eligibility',
-                'pending_documents',
-                'under_review',
-                'submitted',
-                'approved',
-                'rejected',
-                'disbursed',
-                'cancelled'
-            )
-        ),
-
-    admin_approved_by INTEGER,
-    provider_reference TEXT,
-    interest_rate REAL,
-    term_months INTEGER,
-    monthly_payment REAL,
-    farmer_accepted BOOLEAN,
-    rejection_reason TEXT,
-
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (customer_id)
-        REFERENCES Customers(customer_id)
-        ON DELETE CASCADE,
-
-    FOREIGN KEY (field_id)
-        REFERENCES Fields(field_id)
-        ON DELETE SET NULL,
-
-    FOREIGN KEY (admin_approved_by)
-        REFERENCES Technicians(technician_id)
+-- Spare Parts Table
+CREATE TABLE IF NOT EXISTS spare_parts (
+    part_id TEXT PRIMARY KEY,
+    part_name TEXT NOT NULL,
+    price REAL NOT NULL,
+    stock_quantity INTEGER DEFAULT 0
 );
-
--- ==========================
--- Financial Transactions
--- ==========================
-CREATE TABLE Financial_Transactions (
-    transaction_id INTEGER PRIMARY KEY AUTOINCREMENT,
-
-    application_id INTEGER NOT NULL,
-    customer_id INTEGER NOT NULL,
-
-    transaction_type TEXT NOT NULL
-        CHECK (
-            transaction_type IN (
-                'disbursement',
-                'repayment',
-                'fee',
-                'adjustment'
-            )
-        ),
-
-    amount REAL NOT NULL,
-
-    status TEXT NOT NULL DEFAULT 'completed'
-        CHECK (
-            status IN (
-                'pending',
-                'completed',
-                'failed',
-                'reverted'
-            )
-        ),
-
-    verification_hash TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-
-    FOREIGN KEY (application_id)
-        REFERENCES Financing_Applications(application_id)
-        ON DELETE CASCADE,
-
-    FOREIGN KEY (customer_id)
-        REFERENCES Customers(customer_id)
-        ON DELETE CASCADE
-);
-
--- ==========================
--- HITL Tasks (Human-in-the-Loop Escalation)
--- ==========================
-CREATE TABLE HITL_Tasks (
-    task_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    thread_id TEXT NOT NULL,
-    application_id INTEGER,
-    node_name TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    assessed_amount REAL,
-    dscr REAL,
-    risk_level TEXT,
-    state_snapshot TEXT,
-    status TEXT NOT NULL DEFAULT 'pending'
-        CHECK (status IN ('pending', 'approved', 'rejected', 'more_info')),
-    admin_notes TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    resolved_at DATETIME,
-
-    FOREIGN KEY (application_id)
-        REFERENCES Financing_Applications(application_id)
-        ON DELETE SET NULL
-);
-
--- ==========================
--- Failure & Recovery Tickets (Unplanned Mid-Node Failures)
--- ==========================
-CREATE TABLE Tickets (
-    ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
-    thread_id TEXT NOT NULL,
-    failed_node TEXT NOT NULL,
-    error_type TEXT NOT NULL,
-    error_message TEXT NOT NULL,
-    state_snapshot TEXT,
-    status TEXT NOT NULL DEFAULT 'open'
-        CHECK (status IN ('open', 'investigating', 'resolved')),
-    resolution_notes TEXT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    resolved_at DATETIME
-);
-
--- ==========================
--- Agent Tool Registry (Runtime MCP Tool Management)
--- ==========================
-CREATE TABLE Agent_Tool_Registry (
-    agent_id TEXT NOT NULL,
-    tool_name TEXT NOT NULL,
-    is_enabled BOOLEAN NOT NULL DEFAULT 1,
-    description TEXT,
-    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    PRIMARY KEY (agent_id, tool_name)
-);

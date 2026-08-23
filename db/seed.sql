@@ -117,3 +117,13 @@ INSERT INTO Fleet_Reports (report_id, month, status, progress, generated_by, cre
 (1, '2026-05', 'completed', 100, 4, '2026-06-01 00:05:00'),
 (2, '2026-06', 'running',   40,  4, '2026-07-01 00:05:00'),
 (3, '2026-04', 'failed',    15,  1, '2026-05-01 00:05:00');
+
+-- Seed Repair Equipment Data
+INSERT OR IGNORE INTO repair_equipment (equipment_id, equipment_name, model, status) 
+VALUES ('TRACTOR-CAT-01', 'Caterpillar Tractor', 'CAT-2024', 'needs_repair');
+
+-- Seed Spare Parts Data
+INSERT OR IGNORE INTO spare_parts (part_id, part_name, price, stock_quantity) 
+VALUES 
+('PART-001', 'Fuel Filter XL', 250.0, 10),
+('PART-002', 'Injector Nozzle', 400.0, 5);
