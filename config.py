@@ -1,2 +1,2 @@
-MODEL_NAME = "openai/gpt-oss-120b"
-MODEL_PROVIDER = "groq"
+MODEL_NAME = "ministral-3b-2512"
+MODEL_PROVIDER = "mistralai"
