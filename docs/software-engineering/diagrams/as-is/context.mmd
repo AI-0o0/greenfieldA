@@ -1,0 +1,22 @@
+flowchart TB
+    subgraph Users ["Human Actors"]
+        Dispatcher["Dispatcher / Operations Manager<br/>(Interacts via CLI / stdin)"]
+    end
+
+    subgraph GreenfieldSystem ["Greenfield Dispatch & Planning System (AS-IS)"]
+        AgentCore["Autonomous Support & Planning Agent<br/>(LangChain ReAct / 7 Planning Algorithms)"]
+        MCPServer["FastMCP Server<br/>(Greenfield-Dispatch-Server)"]
+    end
+
+    subgraph ExternalServices ["External & Infrastructure Dependencies"]
+        GroqAPI["Groq Cloud LLM API<br/>(Model: openai/gpt-oss-120b)"]
+        SQLiteDB[("SQLite Database<br/>(db/farm.db)")]
+        ChromaDB[("ChromaDB Vector Store<br/>(rag/vector_store_data)")]
+    end
+
+    Dispatcher -->|"Commands / Requests (/plan, /ps, /tot, etc.)"| AgentCore
+    AgentCore -->|"Inference & Structured Outputs"| GroqAPI
+    AgentCore -->|"Tool Invocations (stdio MCP Client)"| MCPServer
+    MCPServer -->|"SQL Queries & Updates"| SQLiteDB
+    MCPServer -->|"Hybrid Search / Vector Embeddings"| ChromaDB
+    AgentCore -.->|"Elicitation Prompts (Refund prompt string bug)"| Dispatcher

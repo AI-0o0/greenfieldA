@@ -1,0 +1,27 @@
+sequenceDiagram
+    autonumber
+    actor User as User
+    participant Agent as agent/agent.py
+    participant LLM as Groq ChatModel
+    participant Client as mcp_client/client.py
+    participant Server as mcp_server/tools.py
+    participant DB as db/farm.db
+
+    User->>Agent: "Dispatch equipment 1 to field 1 for till job, customer 1"
+    Agent->>Agent: assemble_system_prompt()
+    Agent->>LLM: ainvoke(context) with AgentStep schema
+    LLM-->>Agent: AgentStep(thought="Need to dispatch equipment 1", action="dispatch_equipment", action_input={equipment_id:1, field_id:1, customer_id:1, job_type:"till"})
+    Agent->>Client: call_tool("dispatch_equipment", {input_data: {...}})
+    Client->>Server: dispatch_equipment(input_data, ctx)
+    Server->>DB: Check Customer (id=1, credit_hold=0)
+    Server->>DB: Check Field (id=1, customer_id=1)
+    Server->>DB: Check Equipment (id=1, status='idle')
+    Server->>DB: INSERT INTO Dispatch_Jobs (equipment_id=1, field_id=1, job_type='till', status='dispatched')
+    Server->>DB: UPDATE Equipment SET status='dispatched' WHERE equipment_id=1
+    DB-->>Server: OK (lastrowid=6)
+    Server-->>Client: "SUCCESS: Equipment 1 dispatched to field 1 for till (dispatch #6)."
+    Client-->>Agent: Observation string
+    Agent->>Agent: memory.add_observation(...)
+    Agent->>LLM: ainvoke(updated_context)
+    LLM-->>Agent: AgentStep(thought="Job completed successfully", action="final_answer", action_input={answer:"Equipment 1 has been successfully dispatched to field 1 for tilling."})
+    Agent-->>User: "Agent: Equipment 1 has been successfully dispatched to field 1 for tilling."

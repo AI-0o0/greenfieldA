@@ -1,0 +1,76 @@
+graph TD
+    %% Entry Point
+    START([Start: Farmer Request]) --> FARMER[farmer_request: Ingest Request & Profile]
+    FARMER --> ROUTE{route_request: Classify Request}
+
+    %% Branching: Financial Advice vs. Financing Application
+    ROUTE -->|Financial Advice| ADVICE[advice: Initialize Financial Advice State]
+    ROUTE -->|Financing Application| FINANCING[financing: Initialize Financing Application]
+
+    %% ==========================================
+    %% Branch 1: Financial Advice Pipeline
+    %% ==========================================
+    ADVICE --> CONTEXT[collect_context: Gather Farm Profile, Telemetry & Historicals]
+    CONTEXT --> SPECIALIST{Requires Specialist Domain?}
+    
+    SPECIALIST -->|Machinery / Equipment| EQUIPMENT[equipment_agent: Fetch Equipment Telemetry & Rates]
+    SPECIALIST -->|Agronomy / Yield| CROP[crop_agent: Fetch Crop Input Costs & Yield Timing]
+    SPECIALIST -->|General Finance / None| OPTIONS[generate_options: Synthesize Candidate Strategies]
+    
+    EQUIPMENT --> OPTIONS
+    CROP --> OPTIONS
+    
+    OPTIONS --> TOT[tot_advice: Tree-of-Thoughts Multi-Option Evaluation]
+    TOT --> RAG[rag_policies: Hybrid Search & Self-RAG Policy Verification]
+    RAG --> RECOMMEND[recommend: Generate Final Recommendation Report]
+    RECOMMEND --> END_ADVICE([End: Advice Deliverable Delivered])
+
+    %% ==========================================
+    %% Branch 2: Financing Application Pipeline
+    %% ==========================================
+    FINANCING --> ELIGIBILITY[check_eligibility: Check Credit Hold & Standing]
+    ELIGIBILITY --> RAG_ELIG[rag_eligibility: Retrieve Underwriting Policy Rules]
+    RAG_ELIG --> ELIGIBLE{Is Farmer Eligible?}
+    
+    %% Ineligible Path
+    ELIGIBLE -->|No: Credit Hold / Ineligible| REJECT[explain_rejection: Explain Underwriting Rejection & Remediation]
+    REJECT --> END_REJECT([End: Rejection Notice Issued])
+    
+    %% Eligible Path
+    ELIGIBLE -->|Yes: Good Standing| DOCUMENTS[collect_documents: Compile Required Document Checklist]
+    DOCUMENTS --> WAIT_FARMER[/wait_farmer: Checkpoint Awaiting Document Upload/]
+    WAIT_FARMER --> VALIDATE[validate_documents: Verify Document Completeness]
+    
+    VALIDATE --> VALID{All Required Documents Valid?}
+    VALID -->|No: Missing Documents| DOCUMENTS
+    VALID -->|Yes: Complete| FINANCIAL_ANALYSIS[financial_analysis: Assess DSCR & Borrowing Capacity]
+    
+    FINANCIAL_ANALYSIS --> TOT_FIN[tot_financing: Tree-of-Thoughts Financing Structure Search]
+    TOT_FIN --> HITL{Requires Human Manager Sign-off?}
+    
+    %% Human-in-the-Loop Admin Review Path
+    HITL -->|Yes: High Amount / Risk| ADMIN[/admin_review: HITL Admin Approval Checkpoint/]
+    ADMIN --> ADMIN_DECISION{Admin Review Decision}
+    ADMIN_DECISION -->|Rejected| REJECT
+    ADMIN_DECISION -->|Request More Info| DOCUMENTS
+    ADMIN_DECISION -->|Approved| SUBMIT[submit_financing: Submit Application to Provider]
+    
+    %% Standard / Low-Risk Path
+    HITL -->|No: Standard Application| SUBMIT
+    
+    %% External Provider Review
+    SUBMIT --> WAIT_PROVIDER[/wait_provider: Checkpoint Awaiting Lending Decision/]
+    WAIT_PROVIDER --> PROVIDER_DECISION{Provider Response}
+    
+    PROVIDER_DECISION -->|Request More Info| DOCUMENTS
+    PROVIDER_DECISION -->|Declined| PROVIDER_REJECTED[provider_rejected: Provider Declined Terms]
+    PROVIDER_REJECTED --> ALTERNATIVE[generate_alternatives: Generate Fallback Financing Options]
+    ALTERNATIVE --> RECOMMEND
+    
+    PROVIDER_DECISION -->|Approved| FARMER_CONFIRM[/farmer_confirm: Checkpoint Farmer Terms Sign-off/]
+    FARMER_CONFIRM --> FARMER_ACCEPTS{Farmer Accepts Terms?}
+    
+    FARMER_ACCEPTS -->|Declined| ALTERNATIVE
+    FARMER_ACCEPTS -->|Accepted| PROCESS[process_financing: Disburse Funds & Update DB Ledger]
+    PROCESS --> VERIFY[verify_transaction: Cryptographic SHA-256 Audit Verification]
+    VERIFY --> END_FINANCE([End: Financing Agreement Executed & Disbursed])

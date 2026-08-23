@@ -1,0 +1,59 @@
+flowchart TB
+    subgraph CLI ["CLI Interface Container"]
+        MainApp["main.py<br/>CLI REPL Entry Point"]
+        DemoApp["demo.py<br/>Benchmark & Evaluation Harness"]
+    end
+
+    subgraph AgentContainer ["Agent & Planning Subsystem"]
+        AgentRouter["agent/agent.py<br/>Orchestrator & Step Loop"]
+        MemoryMgr["agent/memory/memory.py<br/>ShortTerm & LongTerm Memory"]
+        Consolidator["agent/memory/consolidation.py<br/>Semantic Consolidator"]
+        ContextPruner["agent/context.py<br/>Recursive Summarizer / Zone Pruner"]
+        AlgoPack["agent/algorithms/<br/>7 Planning Algorithms"]
+        DomainEnv["agent/algorithms/environment.py<br/>GreenfieldEnvironment (Regex/Rule Evaluator)"]
+    end
+
+    subgraph MCPClientContainer ["MCP Client Subsystem"]
+        MCPClient["mcp_client/client.py<br/>FastMCP Client (stdio / http)"]
+    end
+
+    subgraph MCPServerContainer ["MCP Server Subsystem"]
+        FastMCPServer["mcp_server/server.py<br/>FastMCP App ('Greenfield-Dispatch-Server')"]
+        MCPTools["mcp_server/tools.py<br/>5 Tools, 2 Resources, 1 Prompt"]
+    end
+
+    subgraph RAGContainer ["RAG & Vector Retrieval Subsystem"]
+        Retrievers["rag/retrievers.py<br/>HybridSearch & BM25Okapi"]
+        VectorStore["rag/vector_store.py<br/>ChromaDB Client & all-MiniLM-L6-v2"]
+        RAGVerifier["rag/verifier.py<br/>Self-RAG Verifier"]
+    end
+
+    subgraph DataStorage ["Data & Storage Layer"]
+        FarmDB[("db/farm.db<br/>SQLite3 Relational DB")]
+        ChromaStore[("rag/vector_store_data/<br/>ChromaDB Parquet/SQLite")]
+        MemoryJSON[("long_term_memory.json<br/>JSON File Store")]
+    end
+
+    subgraph ExternalCloud ["External Cloud APIs"]
+        GroqCloud["Groq API Endpoint<br/>(openai/gpt-oss-120b)"]
+    end
+
+    MainApp --> AgentRouter
+    DemoApp --> AlgoPack
+    AgentRouter --> AlgoPack
+    AgentRouter --> MemoryMgr
+    AgentRouter --> ContextPruner
+    AgentRouter --> MCPClient
+    AgentRouter --> GroqCloud
+    AlgoPack --> DomainEnv
+    MemoryMgr --> MemoryJSON
+    Consolidator --> MemoryMgr
+    Consolidator --> GroqCloud
+    MCPClient -->|"stdio subprocess JSON-RPC"| FastMCPServer
+    FastMCPServer --> MCPTools
+    MCPTools --> FarmDB
+    MCPTools --> Retrievers
+    Retrievers --> VectorStore
+    Retrievers --> RAGVerifier
+    VectorStore --> ChromaStore
+    RAGVerifier --> GroqCloud

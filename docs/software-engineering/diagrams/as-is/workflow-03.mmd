@@ -1,0 +1,23 @@
+sequenceDiagram
+    autonumber
+    actor User as User / Agent
+    participant Tool as search_agricultural_knowledge
+    participant Hybrid as rag/retrievers.py (hybrid_search)
+    participant Chroma as ChromaDB Vector Store
+    participant BM25 as BM25Okapi Engine
+    participant Verifier as rag/verifier.py (self_rag_verify)
+    participant LLM as Groq LLM
+
+    User->>Tool: search_agricultural_knowledge(query="canal buffer spray distance")
+    Tool->>Hybrid: hybrid_search("canal buffer spray distance", top_k=3)
+    Hybrid->>Chroma: Vector search (cosine similarity on all-MiniLM-L6-v2)
+    Chroma-->>Hybrid: Vector document chunks
+    Hybrid->>BM25: Keyword search on tokenized corpus
+    BM25-->>Hybrid: BM25 top keyword chunks
+    Hybrid->>Hybrid: Deduplicate & combine results (top_k=3)
+    Hybrid-->>Tool: 3 merged knowledge chunks
+    Tool->>Verifier: self_rag_verify(query, chunks, retrieved_text)
+    Verifier->>LLM: Invoke structured VerificationResult(is_relevant, is_supported, reasoning)
+    LLM-->>Verifier: VerificationResult(is_relevant=True, is_supported=True)
+    Verifier-->>Tool: Verification confirmed
+    Tool-->>User: "Retrieved Knowledge (Relevance Confirmed): [SOP-CHEM-4040: 15m canal buffer...]"

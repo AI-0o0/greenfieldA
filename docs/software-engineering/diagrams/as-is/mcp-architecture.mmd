@@ -1,0 +1,43 @@
+flowchart TB
+    subgraph HostProcess ["Agent Host Process"]
+        ClientInstance["create_client(mode='stdio'|'http')<br/>FastMCP Client"]
+        ElicitHandler["on_elicitation()<br/>Human-in-the-Loop Handler"]
+        ProgressHandler["on_progress()<br/>Progress Notification Handler"]
+    end
+
+    subgraph Subprocess ["FastMCP Server Process (mcp_server/server.py)"]
+        ServerApp["FastMCP('Greenfield-Dispatch-Server')"]
+        
+        subgraph ToolsGroup ["Exposed MCP Tools"]
+            T1["dispatch_equipment"]
+            T2["batch_dispatch"]
+            T3["process_payment"]
+            T4["log_incident_note"]
+            T5["search_agricultural_knowledge"]
+        end
+
+        subgraph ResourcesGroup ["Exposed MCP Resources"]
+            R1["policy://pesticide-compliance"]
+            R2["fleet://equipment-status"]
+        end
+
+        subgraph PromptsGroup ["Exposed MCP Prompts"]
+            P1["draft_delay_explanation"]
+        end
+    end
+
+    subgraph Downstream ["Underlying Systems"]
+        SQLiteLayer[("db/farm.db (SQLite)")]
+        RAGLayer["rag/retrievers.py (Chroma + BM25)"]
+    end
+
+    ClientInstance <-->|"Standard I/O JSON-RPC Protocol"| ServerApp
+    ServerApp --> T1 & T2 & T3 & T4 & T5
+    ServerApp --> R1 & R2
+    ServerApp --> P1
+    T1 & T2 & T3 --> SQLiteLayer
+    R2 --> SQLiteLayer
+    P1 --> SQLiteLayer
+    T5 --> RAGLayer
+    T1 -.->|"ctx.elicit() / SignoffResponse"| ElicitHandler
+    T2 -.->|"ctx.session.send_progress()"| ProgressHandler

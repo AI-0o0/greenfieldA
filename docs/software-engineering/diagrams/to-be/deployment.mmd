@@ -1,0 +1,37 @@
+flowchart TB
+    subgraph ClientLayer ["Client Access Layer"]
+        BrowserClient["Dispatcher Web Dashboard (HTTPS:443)"]
+        CLITerminal["Remote / Local CLI Client (SSH / MCP-SSE)"]
+    end
+
+    subgraph IngressTier ["Ingress & Reverse Proxy"]
+        NginxProxy["NGINX Reverse Proxy / TLS Termination<br/>(Rate Limiting & Security Headers)"]
+    end
+
+    subgraph ContainerCluster ["Docker Compose / Kubernetes Services"]
+        APIBackend["greenfield-api Container<br/>(FastAPI App, Uvicorn, 4 Workers)"]
+        MCPServerService["greenfield-mcp Container<br/>(FastMCP Server, SSE / Streamable HTTP)"]
+        AgentWorker["greenfield-worker Container<br/>(Async Planning & Consolidation Worker)"]
+    end
+
+    subgraph DataServices ["Persistent Storage & Cache Services"]
+        PostgresService[("PostgreSQL 16 Container<br/>(farm_prod Database & Volumes)")]
+        ChromaService[("ChromaDB Service Container<br/>(Vector Store Volume)")]
+        RedisService[("Redis 7 Cache Container<br/>(State, Sessions & Celery Queue)")]
+    end
+
+    subgraph CloudAPIs ["External Managed APIs"]
+        GroqCloudAPI["Groq Cloud LLM Service"]
+    end
+
+    BrowserClient --> NginxProxy
+    CLITerminal --> NginxProxy
+    NginxProxy --> APIBackend
+    APIBackend --> MCPServerService
+    APIBackend --> AgentWorker
+    AgentWorker --> MCPServerService
+    AgentWorker --> RedisService
+    AgentWorker --> GroqCloudAPI
+    MCPServerService --> PostgresService
+    MCPServerService --> ChromaService
+    APIBackend --> PostgresService

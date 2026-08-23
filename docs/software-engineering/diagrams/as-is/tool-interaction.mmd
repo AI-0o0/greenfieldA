@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    participant Agent as Agent Execution
+    participant Tool as dispatch_equipment (tools.py)
+    participant Ctx as FastMCP Context
+    participant DB as SQLite (farm.db)
+    actor Human as Human Dispatcher
+
+    Agent->>Tool: dispatch_equipment(equipment_id=3, field_id=2, job_type='spray', chemical_id=1, customer_id=1)
+    Tool->>Tool: jsonschema.validate(input_data, DISPATCH_SCHEMA)
+    Tool->>Ctx: check_client_capability(elicitation)
+    alt Elicitation Not Supported
+        Tool-->>Agent: RuntimeError("SECURITY BLOCK: Client does not support elicitation")
+    end
+    Tool->>DB: Validate Customer 1 exists & credit_hold == 0
+    Tool->>DB: Validate Field 2 belongs to Customer 1
+    Tool->>DB: Validate Equipment 3 status == 'idle'
+    Tool->>DB: Query Chemical 1 (requires_signoff == 1)
+    
+    opt Chemical Requires Sign-off (requires_signoff == 1)
+        Tool->>Ctx: ctx.elicit("DANGER: Chemical 'Glyphosate' is restricted. Approve?", SignoffResponse)
+        Ctx->>Human: Interactive CLI Prompt ("REFUND CONFIRMATION" prompt bug)
+        Human-->>Ctx: "confirm" / "cancel"
+        Ctx-->>Tool: ElicitResult(action="accept"|"decline")
+        alt Declined or Cancelled
+            Tool-->>Agent: ValueError("Dispatch denied by human reviewer")
+        end
+    end
+
+    Tool->>DB: INSERT INTO Dispatch_Jobs (status='dispatched', approval_status='approved')
+    Tool->>DB: UPDATE Equipment SET status='dispatched' WHERE equipment_id=3
+    Tool-->>Agent: "SUCCESS: Equipment 3 dispatched to field 2 for spray (dispatch #X). (Chemical applied: Glyphosate)"

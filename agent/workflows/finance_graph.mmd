@@ -1,0 +1,88 @@
+flowchart TD
+    START([Start]) --> FARMER[Farmer Request]
+
+    FARMER --> ROUTE{Route Request}
+
+    ROUTE --> ADVICE[Financial Advice]
+    ROUTE --> FINANCING[Financing Request]
+
+    %% =========================
+    %% Financial Advice Path
+    %% =========================
+
+    ADVICE --> CONTEXT[Collect Financial Context]
+
+    CONTEXT --> SPECIALIST{Need Specialist Data?}
+
+    SPECIALIST -->|Equipment| EQUIPMENT[Equipment Agent]
+    SPECIALIST -->|Crop| CROP[Crop Agent]
+    SPECIALIST -->|No| OPTIONS[Generate Financial Options]
+
+    EQUIPMENT --> OPTIONS
+    CROP --> OPTIONS
+
+    OPTIONS --> TOT[Tree of Thoughts\nCompare Options]
+
+    TOT --> RAG[RAG\nPolicies & Financial Rules]
+
+    RAG --> RECOMMEND[Generate Recommendation]
+
+    RECOMMEND --> END([End])
+
+    %% =========================
+    %% Financing Path
+    %% =========================
+
+    FINANCING --> ELIGIBILITY[Check Eligibility]
+
+    ELIGIBILITY --> RAG_ELIGIBILITY[RAG\nEligibility Rules]
+
+    RAG_ELIGIBILITY --> ELIGIBLE{Eligible?}
+
+    ELIGIBLE -->|No| REJECT[Explain Rejection]
+    REJECT --> END
+
+    ELIGIBLE -->|Yes| DOCUMENTS[Collect Required Documents]
+
+    DOCUMENTS --> WAIT_FARMER{{Wait for Farmer}}
+
+    WAIT_FARMER --> VALIDATE[Validate Documents]
+
+    VALIDATE --> VALID{Documents Valid?}
+
+    VALID -->|No| DOCUMENTS
+    VALID -->|Yes| FINANCIAL_ANALYSIS[Assess Financing Need]
+
+    FINANCIAL_ANALYSIS --> TOT_FIN[Tree of Thoughts\nCompare Financing Options]
+
+    TOT_FIN --> HITL{HITL Required?}
+
+    HITL -->|No| SUBMIT[Submit Financing Application]
+    HITL -->|Yes| ADMIN[Admin Review]
+
+    ADMIN --> ADMIN_DECISION{Admin Decision}
+
+    ADMIN_DECISION -->|Approve| SUBMIT
+    ADMIN_DECISION -->|Reject| REJECT
+    ADMIN_DECISION -->|More Info| DOCUMENTS
+
+    SUBMIT --> WAIT_PROVIDER{{Wait for External Response}}
+
+    WAIT_PROVIDER --> PROVIDER{Provider Response}
+
+    PROVIDER -->|Approved| FARMER_CONFIRM[Farmer Confirmation]
+
+    PROVIDER -->|Rejected| PROVIDER_REJECTED[Explain Rejection]
+    PROVIDER_REJECTED --> ALTERNATIVE[Generate Alternative Options]
+    ALTERNATIVE --> RECOMMEND
+
+    PROVIDER -->|More Information| DOCUMENTS
+
+    FARMER_CONFIRM --> CONFIRMED{Farmer Accepts?}
+
+    CONFIRMED -->|No| ALTERNATIVE
+    CONFIRMED -->|Yes| PROCESS[Process Financing]
+
+    PROCESS --> VERIFY[Verify Transaction]
+
+    VERIFY --> END

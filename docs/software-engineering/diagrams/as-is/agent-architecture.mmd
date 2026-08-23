@@ -1,0 +1,37 @@
+flowchart LR
+    subgraph Inbound ["Input Processing"]
+        UserMsg["User Message / Prompt"]
+        ScratchpadState["Scratchpad State<br/>(plan, current_subgoal)"]
+        SemanticState["Semantic Facts & Episodic History"]
+    end
+
+    subgraph PromptEngine ["System Prompt Engine"]
+        PromptFactory["assemble_system_prompt()"]
+        ToolList["Dynamic MCP Tool Registry"]
+    end
+
+    subgraph ReasoningLoop ["ReAct Reasoning Loop (MAX_STEPS=6)"]
+        ContextPrune["Recursive Summarization<br/>(keep_recent=6)"]
+        StructuredLLM["Structured LLM Invoker<br/>(build_agent_step_model)"]
+        StepValidator["validate_step()"]
+        ActionExec["handle_step_result()"]
+    end
+
+    subgraph ToolingAndVerification ["Execution & Verification"]
+        MCPExecution["tool_call()<br/>FastMCP Client Transport"]
+        SelfRAGCheck["Self-RAG Verifier<br/>(Relevance & Support Grounding)"]
+        MemoryUpdate["Observation Logging & Memory Truncation"]
+    end
+
+    UserMsg --> PromptFactory
+    ScratchpadState --> PromptFactory
+    SemanticState --> PromptFactory
+    ToolList --> PromptFactory
+    PromptFactory --> ContextPrune
+    ContextPrune --> StructuredLLM
+    StructuredLLM --> StepValidator
+    StepValidator --> ActionExec
+    ActionExec -->|"Tool Action"| MCPExecution
+    ActionExec -->|"Terminal Action"| SelfRAGCheck
+    MCPExecution --> MemoryUpdate
+    MemoryUpdate --> ContextPrune

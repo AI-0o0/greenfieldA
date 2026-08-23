@@ -1,0 +1,19 @@
+sequenceDiagram
+    autonumber
+    actor User as Agent / Dispatcher
+    participant RAG as RAG Service Engine
+    participant Hybrid as Hybrid Retriever (Vector + BM25)
+    participant CrossEnc as Cross-Encoder Reranker
+    participant Verifier as Self-RAG Verifier Node
+    participant LLM as LLM Provider
+
+    User->>RAG: Query: "Maximum spray boom height and wind limits for organic boundary"
+    RAG->>Hybrid: Retrieve top 8 dense chunks & top 8 sparse BM25 chunks
+    Hybrid-->>RAG: 16 candidate chunks
+    RAG->>CrossEnc: Rerank candidates by semantic cross-attention
+    CrossEnc-->>RAG: Top 3 highest-scoring chunks
+    RAG->>Verifier: Check relevance and factual support against query
+    Verifier->>LLM: Verify grounding prompt
+    LLM-->>Verifier: Grounded = True (Confidence = 0.98)
+    Verifier-->>RAG: Verified knowledge with source citations (SOP-CHEM-4040, MAN-001)
+    RAG-->>User: Structured Knowledge Deliverable with highlighted regulatory constraints

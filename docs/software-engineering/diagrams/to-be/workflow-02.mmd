@@ -1,0 +1,27 @@
+sequenceDiagram
+    autonumber
+    actor Dispatcher as Dispatcher
+    participant Agent as LangGraph Orchestrator
+    participant MCTS as Grounded LATS / ToT Engine
+    participant Env as Grounded Live DB Environment
+    participant MCP as FastMCP Tools
+    participant DB as PostgreSQL DB
+
+    Dispatcher->>Agent: Operational Shock: "SPR-3001 broken down + 18 km/h wind gusts on Northern Fields"
+    Agent->>MCP: Get live fleet status & active jobs
+    MCP->>DB: SELECT * FROM Equipment; SELECT * FROM Dispatch_Jobs WHERE status='pending'
+    DB-->>MCP: Fleet snapshot (SPR-3001 down, SPR-3002 idle, Field 4 wind=18km/h)
+    MCP-->>Agent: Structured fleet state
+    
+    Agent->>MCTS: Search candidate reshuffle plans (Monte Carlo Tree Search with Grounded DB feedback)
+    loop MCTS Iterations
+        MCTS->>MCTS: Propose Candidate Schedule Permutation
+        MCTS->>Env: Evaluate candidate against Live DB + Weather + Buffer rules
+        Env->>DB: Verify equipment availability, technician certification, soil compaction
+        Env-->>MCTS: Grounded Feedback Score (0.0 - 1.0) + violation details
+        MCTS->>MCTS: Backpropagate value & accumulate reflection notes
+    end
+    MCTS-->>Agent: Optimal Validated Schedule (Score: 0.94)
+
+    Agent->>Agent: Self-Refine & Critic pass (Verify complete work orders)
+    Agent-->>Dispatcher: Present full Day Schedule Reshuffle with impact analysis & 1-click execution button

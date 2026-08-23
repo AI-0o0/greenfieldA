@@ -5,6 +5,7 @@ import sys
 import asyncio
 import sqlite3
 import jsonschema
+import mcp.types as types
 from typing import Literal, Optional, List
 from fastmcp import Context
 
@@ -23,18 +24,39 @@ import sqlite3
 from typing import List, Dict, Any
 
 def get_db_connection():
-    # Fallback path creation if db folder is missing
     db_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "db"))
-    os.makedirs(db_dir, exist_ok=True)
     db_path = os.environ.get("GREENFIELD_DB_PATH") or os.path.join(db_dir, "farm.db")
-    
+
+    if not os.path.exists(db_path):
+        raise RuntimeError(
+            f"SETUP ERROR: Database not found at '{db_path}'. "
+            f"Run schema.sql (and seed.sql, if needed) to initialize it "
+            f"before starting the server."
+        )
+
     conn = sqlite3.connect(db_path)
     conn.row_factory = sqlite3.Row
-    # Ensure basic tables exist to prevent crashes during test
-    conn.execute("CREATE TABLE IF NOT EXISTS CUSTOMERS (customer_id INTEGER PRIMARY KEY, credit_hold INTEGER)")
-    conn.execute("CREATE TABLE IF NOT EXISTS EQUIPMENT (equipment_id INTEGER PRIMARY KEY, status TEXT)")
-    conn.execute("CREATE TABLE IF NOT EXISTS CHEMICALS (chemical_id INTEGER PRIMARY KEY, requires_signoff INTEGER)")
-    conn.commit()
+    conn.execute("PRAGMA foreign_keys = ON")
+
+    # Fail loudly if the real schema hasn't been applied, instead of
+    # silently operating against incomplete fallback tables.
+    required_tables = {
+        "Customers", "Fields", "Equipment", "Technicians",
+        "Chemicals", "Dispatch_Jobs", "Crop_Cases", "Crop_HITL_Tasks", "Tickets",
+    }
+    cursor = conn.execute(
+        "SELECT name FROM sqlite_master WHERE type = 'table'"
+    )
+    existing_tables = {row["name"] for row in cursor.fetchall()}
+    missing = required_tables - existing_tables
+    if missing:
+        conn.close()
+        raise RuntimeError(
+            f"SETUP ERROR: Database at '{db_path}' is missing required "
+            f"tables: {sorted(missing)}. Run schema.sql and the crop_cases "
+            f"migration before starting the server."
+        )
+
     return conn
 
 
@@ -97,8 +119,21 @@ async def log_incident_note(input_data: IncidentInput, ctx: Context) -> str:
 
 
 
-async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
-    """Dispatch a piece of equipment to perform a job on a specific field."""
+async def dispatch_equipment(
+    input_data: DispatchInput,
+    ctx: Optional[Context] = None,
+    pre_approved: bool = False,
+) -> str:
+    """Dispatch a piece of equipment to perform a job on a specific field.
+
+    pre_approved is intentionally NOT part of DispatchInput (the wire
+    schema real MCP clients submit). It can only be set True by trusted
+    server-side callers (e.g. the crop-disease state graph's
+    execute_treatment node) after an equivalent human sign-off has
+    already happened through that system's own HITL path. Any request
+    arriving through the normal MCP tool-call protocol has no way to
+    set this, so elicitation remains mandatory for all external clients.
+    """
 
     # Schema-level validation (types/shape, independent of the checks below)
     try:
@@ -112,15 +147,23 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
     chem_id = input_data.chemical_id
     req_by = input_data.customer_id
 
-    has_elicitation = ctx.session.check_client_capability(
-        types.ClientCapabilities(elicitation=types.ElicitationCapability())
-    )
+    if not pre_approved:
+        if ctx is None:
+            raise RuntimeError(
+                "SECURITY BLOCK: No MCP context provided and this call is not "
+                "pre_approved. dispatch_equipment cannot verify elicitation "
+                "capability or obtain sign-off without one or the other."
+            )
 
-    if not has_elicitation:
-        raise RuntimeError(
-            "SECURITY BLOCK: Client does not support elicitation. "
-            "The dispatch_equipment tool is strictly disabled for this client."
+        has_elicitation = ctx.session.check_client_capability(
+            types.ClientCapabilities(elicitation=types.ElicitationCapability())
         )
+
+        if not has_elicitation:
+            raise RuntimeError(
+                "SECURITY BLOCK: Client does not support elicitation. "
+                "The dispatch_equipment tool is strictly disabled for this client."
+            )
 
     if job == "spray" and not chem_id:
         raise ValueError("chemical_id is required for spray jobs.")
@@ -170,27 +213,35 @@ async def dispatch_equipment(input_data: DispatchInput, ctx: Context) -> str:
 
             chemical_name = chemical["name"]
 
-            if chemical["requires_signoff"] == 1:
-                result = await ctx.elicit(
-                    message=(
-                        f"DANGER: Chemical '{chemical['name']}' is restricted. "
-                        f"Approve dispatching equipment {eq_id} to field {f_id}?"
-                    ),
-                    response_type=SignoffResponse,
-                )
-
-                if result.action == "accept":
-                    if not result.data.approved:
-                        raise ValueError(
-                            "Dispatch denied by human reviewer"
-                            + (f": {result.data.notes}" if result.data.notes else ".")
-                        )
+        if chemical["requires_signoff"] == 1:
+                if pre_approved:
+                    # Graph-level HITL (Crop_HITL_Tasks) already obtained
+                    # explicit human sign-off for this exact treatment
+                    # before execute_treatment called this function.
+                    # Skip in-tool elicitation entirely to avoid a second,
+                    # conflicting pause.
                     signoff_approved = True
-                    # approved — fall through to dispatch
-                elif result.action == "decline":
-                    raise ValueError("Human declined to review this dispatch request.")
-                else:  # "cancel"
-                    raise RuntimeError("Sign-off request was cancelled before a decision was made.")
+                else:
+                    result = await ctx.elicit(
+                        message=(
+                            f"DANGER: Chemical '{chemical['name']}' is restricted. "
+                            f"Approve dispatching equipment {eq_id} to field {f_id}?"
+                        ),
+                        response_type=SignoffResponse,
+                    )
+
+                    if result.action == "accept":
+                        if not result.data.approved:
+                            raise ValueError(
+                                "Dispatch denied by human reviewer"
+                                + (f": {result.data.notes}" if result.data.notes else ".")
+                            )
+                        signoff_approved = True
+                        # approved — fall through to dispatch
+                    elif result.action == "decline":
+                        raise ValueError("Human declined to review this dispatch request.")
+                    else:  # "cancel"
+                        raise RuntimeError("Sign-off request was cancelled before a decision was made.")
         # =========================================
 
         # --- Success: record the dispatch in the DB ---

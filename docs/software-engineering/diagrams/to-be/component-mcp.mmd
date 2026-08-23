@@ -1,0 +1,35 @@
+flowchart TB
+    subgraph MCPServerModule ["Target FastMCP Server Component Architecture"]
+        ServerCore["FastMCP Enterprise Host"]
+        
+        subgraph SecurityLayer ["Security & Authorization Guard"]
+            AuthGuard["JWT / RBAC Validator"]
+            ParamValidator["Strict Pydantic V2 & JSON-Schema Validator"]
+            RateLimiter["Per-Customer / Per-Tool Rate Limiter"]
+        end
+
+        subgraph ToolHandlers ["Structured Tool Handlers"]
+            T_Dispatch["dispatch_equipment<br/>(Atomic DB Transaction & Locking)"]
+            T_Batch["batch_dispatch<br/>(Async Worker with Chunked Progress)"]
+            T_Payment["process_payment<br/>(Payment Gateway Adapter & Hold Clear)"]
+            T_Incident["log_incident_note<br/>(Persisted to Incident_Notes DB Table)"]
+            T_Knowledge["search_agricultural_knowledge<br/>(RAG Hybrid Search + Self-RAG)"]
+            T_Emergency["emergency_stop<br/>(Immediate Fleet Halt & Incident Creation)"]
+        end
+
+        subgraph ResourceHandlers ["Dynamic Resource Handlers"]
+            R_Status["fleet://equipment-status<br/>(Live Query with Caching)"]
+            R_Policy["policy://pesticide-compliance<br/>(Versioned Compliance Policy)"]
+            R_Weather["weather://field-forecast<br/>(Live Weather & Wind Advisory Stream)"]
+        end
+
+        subgraph AuditModule ["Audit & Telemetry"]
+            AuditWriter["Structured Audit Logger<br/>(Tool, Actor, Arguments, Result, Timestamp)"]
+        end
+    end
+
+    ServerCore --> SecurityLayer
+    SecurityLayer --> ToolHandlers
+    SecurityLayer --> ResourceHandlers
+    ToolHandlers --> AuditWriter
+    ResourceHandlers --> AuditWriter

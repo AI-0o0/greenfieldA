@@ -1,0 +1,39 @@
+graph TD
+    %% Entry Point
+    START([Start: Farmer Request]) --> INGEST[ingest_fertilizer_request: Ingest Field & Crop Context]
+    INGEST --> BASELINE[analyze_baseline_soil: Evaluate Initial N-P-K, pH & Organic Matter]
+    BASELINE --> PRESCRIBE[generate_fertilizer_prescription: Formulate Target Nutrient Ratios]
+    
+    PRESCRIBE --> POLICY_CHECK{Exceeds Agency Safety / Buffer Limits?}
+    
+    %% Policy & HITL Path
+    POLICY_CHECK -->|Yes: High Concentration / Canal Buffer| ADMIN_REVIEW[/admin_review: HITL Agronomy Safety Review/]
+    ADMIN_REVIEW --> ADMIN_DECISION{Administrator Decision}
+    ADMIN_DECISION -->|Rejected| PRESCRIBE
+    ADMIN_DECISION -->|Approved| ISSUE[issue_prescription: Issue Field Treatment Work Order]
+    
+    %% Standard Path
+    POLICY_CHECK -->|No: Within Standard Thresholds| ISSUE
+    
+    %% Application & Asynchronous Follow-up
+    ISSUE --> AWAIT_TREATMENT[/wait_followup: Durable Checkpoint Awaiting Treatment & Follow-up Soil Reading/]
+    AWAIT_TREATMENT --> INGEST_FOLLOWUP[ingest_followup_telemetry: Ingest Post-Treatment Soil Telemetry]
+    
+    %% Evaluation & Adaptive Decision
+    INGEST_FOLLOWUP --> EVALUATE[evaluate_outcome: Compare Follow-up N-P-K against Target Levels]
+    EVALUATE --> NUTRIENT_STATUS{Nutrient Target Achieved?}
+    
+    %% Insufficient / Deficient Loop
+    NUTRIENT_STATUS -->|Insufficient: Nutrient Deficit Remains| REVISE[formulate_remedial_prescription: Formulate Adaptive Booster Plan]
+    REVISE --> PRESCRIBE
+    
+    %% Successful Outcome
+    NUTRIENT_STATUS -->|Sufficient / Balanced| FINALIZE[finalize_case: Update Field Soil Ledger & Close Case]
+    FINALIZE --> COMPLETED([End: Field Restored & Case Completed])
+    
+    %% Failure & Incident Recovery Subgraph
+    subgraph Incident_Recovery [Fault Tolerance & Recovery Ticket Flow]
+        UNEXPECTED_ERROR[Execution / Network Failure] --> CREATE_TICKET[create_recovery_ticket: Persist Error Context & Checkpoint ID]
+        CREATE_TICKET --> RESOLVE_TICKET[Operator Resolves Ticket & Restores State]
+        RESOLVE_TICKET --> RESUME_CHECKPOINT[Resume from Last Valid Checkpoint]
+    end

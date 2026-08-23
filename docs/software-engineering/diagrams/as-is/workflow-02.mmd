@@ -1,0 +1,27 @@
+sequenceDiagram
+    autonumber
+    actor Dispatcher as Dispatcher
+    participant CLI as main.py / demo.py
+    participant Algo as agent/algorithms/decomposition.py
+    participant LLM as Groq LLM (gpt-oss-120b)
+    participant ThreadPool as Parallel ThreadPoolExecutor
+
+    Dispatcher->>CLI: "/plan SPR-3001 broke down on Field 1. Reshuffle Tuesday board."
+    CLI->>Algo: decompose_goal(goal, llm)
+    Algo->>LLM: invoke(PLANNER_SYSTEM, goal) with GeneratedPlan schema
+    LLM-->>Algo: GeneratedPlan(tasks=[t1, t2, t3, t4], dependencies)
+    Algo->>Algo: Validate Plan DAG (Cycle check & topological sort)
+    CLI->>Algo: execute_plan(plan, llm, max_workers=4)
+    
+    loop Topological Generation Batches
+        Algo->>ThreadPool: Submit independent tasks in parallel
+        ThreadPool->>LLM: Execute task t1 (e.g. check idle sprayers)
+        ThreadPool->>LLM: Execute task t2 (e.g. check field weather)
+        LLM-->>ThreadPool: Task output t1
+        LLM-->>ThreadPool: Task output t2
+    end
+
+    Algo->>LLM: Execute Terminal Synthesis Task t4(context=[out_t1, out_t2, out_t3])
+    LLM-->>Algo: Synthesized Reshuffle Plan
+    Algo-->>CLI: final_output()
+    CLI-->>Dispatcher: Display complete reshuffled schedule

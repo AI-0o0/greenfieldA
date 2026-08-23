@@ -1,0 +1,38 @@
+flowchart TB
+    subgraph ClientApps ["Client Applications"]
+        WebUI["Web Management Dashboard<br/>(React / TypeScript SPA)"]
+        CLIApp["Dispatcher CLI Terminal<br/>(Rich Python TUI)"]
+    end
+
+    subgraph APILayer ["API & Ingress Gateway"]
+        APIGateway["FastAPI Ingress Gateway<br/>(JWT Auth, Rate Limiting, OpenAPI)"]
+    end
+
+    subgraph CoreContainers ["Core Application Containers"]
+        AgentService["Agent Dispatch & Planning Worker<br/>(LangGraph Workflow Engine)"]
+        MCPServerContainer["FastMCP Microservice<br/>(Tool Registry & Database Isolation)"]
+        RAGService["Knowledge & Retrieval Engine<br/>(Hybrid Search, Reranking & Verification)"]
+    end
+
+    subgraph DataTier ["Persistence & Messaging Tier"]
+        MainDB[("PostgreSQL / SQLite Database<br/>(Transactional Fleet & Job Records)")]
+        VectorDB[("ChromaDB Vector Store<br/>(Indexed SOPs, Manuals, Policies)")]
+        RedisCache[("Redis 7<br/>(Session Memory, State Cache & Locks)")]
+        AuditLog[("Audit & Telemetry Store<br/>(Structured JSON Logs / OpenTelemetry)")]
+    end
+
+    subgraph ExternalAPIs ["External Cloud Services"]
+        LLMGateway["Resilient LLM Gateway<br/>(Primary: Groq, Fallback: Mistral/OpenAI)"]
+    end
+
+    WebUI -->|"HTTPS / WebSocket"| APIGateway
+    CLIApp -->|"FastMCP stdio / SSE"| APIGateway
+    APIGateway --> AgentService
+    AgentService --> MCPServerContainer
+    AgentService --> RAGService
+    AgentService --> RedisCache
+    AgentService --> LLMGateway
+    MCPServerContainer --> MainDB
+    MCPServerContainer --> AuditLog
+    RAGService --> VectorDB
+    RAGService --> LLMGateway

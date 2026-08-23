@@ -1,0 +1,35 @@
+sequenceDiagram
+    autonumber
+    actor Dispatcher as Dispatcher
+    participant Gateway as API Gateway / Web UI
+    participant Agent as LangGraph Dispatch Agent
+    participant MCP as FastMCP Server
+    participant DB as PostgreSQL DB (farm_prod)
+    participant RAG as Knowledge Engine
+    actor Supervisor as Supervisor (Mobile / Web Sign-off)
+
+    Dispatcher->>Gateway: Submit dispatch request (Equipment 3, Field 2, Job='spray', Chemical 1)
+    Gateway->>Agent: Run dispatch workflow with JWT context (technician_id=1)
+    Agent->>MCP: check_equipment_and_field_status(equipment_id=3, field_id=2)
+    MCP->>DB: Query Equipment status, Customer credit hold, Field proximity
+    DB-->>MCP: Equipment='idle', Customer credit_hold=0, Field canal proximity=10m
+    MCP-->>Agent: Live DB Status
+
+    Agent->>RAG: Check chemical compliance for Chemical 1 (Glyphosate)
+    RAG-->>Agent: SOP-CHEM-4040: Restricted chemical, 15m canal buffer, requires signoff
+    
+    Agent->>Agent: Grounded Validator checks: Canal distance 10m < 15m buffer requirement!
+    Agent->>Gateway: Notify Dispatcher: "Warning: Field 2 is 10m from canal. 15m buffer required. Propose low-hazard chemical or boundary adjustment."
+    Dispatcher->>Gateway: Dispatcher adjusts swath & requests supervisor approval
+    
+    Agent->>MCP: initiate_signoff_request(dispatch_details)
+    MCP->>Supervisor: Push Notification with exact chemical, field map, buffer warnings
+    Supervisor-->>MCP: Sign-off Approved (Digital Signature & Notes)
+    
+    MCP->>DB: BEGIN TRANSACTION
+    MCP->>DB: INSERT INTO Dispatch_Jobs (status='dispatched', approval_status='approved')
+    MCP->>DB: UPDATE Equipment SET status='dispatched' WHERE equipment_id=3
+    MCP->>DB: INSERT INTO Audit_Logs (action='dispatch_equipment', status='SUCCESS')
+    MCP->>DB: COMMIT TRANSACTION
+    MCP-->>Agent: Dispatch confirmed (dispatch_id=101)
+    Agent-->>Dispatcher: Final Response: "Equipment 3 successfully dispatched under approved buffer adjustment."

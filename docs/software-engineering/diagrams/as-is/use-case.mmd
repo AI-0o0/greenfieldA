@@ -1,0 +1,39 @@
+flowchart LR
+    Dispatcher(("Dispatcher / Logistics Tech"))
+    Supervisor(("Supervisor / Manager"))
+    Customer(("Customer (Implicit)"))
+    GroqLLM(("Groq LLM Service"))
+
+    subgraph UseCases ["Reconstructed System Use Cases (AS-IS)"]
+        UC1(["UC-01: Dispatch Single Equipment"])
+        UC2(["UC-02: Batch Dispatch Equipment"])
+        UC3(["UC-03: Process Customer Payment / Clear Hold"])
+        UC4(["UC-04: Log Field Incident Note"])
+        UC5(["UC-05: Search Agricultural Policies & SOPs (RAG)"])
+        UC6(["UC-06: Approve Restricted Chemical Dispatch (Sign-off)"])
+        UC7(["UC-07: Reshuffle Dispatch Board via Static DAG"])
+        UC8(["UC-08: Reshuffle Dispatch Board via Dynamic Loop"])
+        UC9(["UC-09: Prioritize Conflicted Tasks (ToT / PS)"])
+        UC10(["UC-10: Self-Correction Search (LATS / Reflexion)"])
+        UC11(["UC-11: Draft Delay Explanation Prompt"])
+    end
+
+    Dispatcher --> UC1
+    Dispatcher --> UC2
+    Dispatcher --> UC3
+    Dispatcher --> UC4
+    Dispatcher --> UC5
+    Dispatcher --> UC7
+    Dispatcher --> UC8
+    Dispatcher --> UC9
+    Dispatcher --> UC10
+    Dispatcher --> UC11
+
+    Supervisor --> UC6
+    UC1 -.->|triggers if chemical requires signoff| UC6
+    UC1 --> GroqLLM
+    UC5 --> GroqLLM
+    UC7 --> GroqLLM
+    UC8 --> GroqLLM
+    UC9 --> GroqLLM
+    UC10 --> GroqLLM

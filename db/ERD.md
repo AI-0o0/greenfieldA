@@ -73,16 +73,50 @@ FLEET_REPORTS {
     datetime created_at
 }
 
-CUSTOMERS ||--o{ FIELDS : owns
+    FINANCING_APPLICATIONS {
+        int application_id PK
+        int customer_id FK
+        int field_id FK
+        float requested_amount
+        string purpose
+        string status
+        int admin_approved_by FK
+        string provider_reference
+        float interest_rate
+        int term_months
+        float monthly_payment
+        boolean farmer_accepted
+        string rejection_reason
+        datetime created_at
+        datetime updated_at
+    }
 
-FIELDS ||--o{ DISPATCH_JOBS : assigned_to
-EQUIPMENT ||--o{ DISPATCH_JOBS : performs
-CHEMICALS ||--o{ DISPATCH_JOBS : used_in
+    FINANCIAL_TRANSACTIONS {
+        int transaction_id PK
+        int application_id FK
+        int customer_id FK
+        string transaction_type
+        float amount
+        string status
+        string verification_hash
+        datetime created_at
+    }
 
-TECHNICIANS ||--o{ DISPATCH_JOBS : dispatches
-TECHNICIANS ||--o{ DISPATCH_JOBS : approves
+    CUSTOMERS ||--o{ FIELDS : owns
+    CUSTOMERS ||--o{ FINANCING_APPLICATIONS : applies_for
+    CUSTOMERS ||--o{ FINANCIAL_TRANSACTIONS : pays_or_receives
 
-EQUIPMENT ||--o{ INCIDENT_NOTES : has
-TECHNICIANS ||--o{ INCIDENT_NOTES : writes
+    FIELDS ||--o{ DISPATCH_JOBS : assigned_to
+    FIELDS ||--o{ FINANCING_APPLICATIONS : secures
+    EQUIPMENT ||--o{ DISPATCH_JOBS : performs
+    CHEMICALS ||--o{ DISPATCH_JOBS : used_in
 
-TECHNICIANS ||--o{ FLEET_REPORTS : generates
+    TECHNICIANS ||--o{ DISPATCH_JOBS : dispatches
+    TECHNICIANS ||--o{ DISPATCH_JOBS : approves
+    TECHNICIANS ||--o{ FINANCING_APPLICATIONS : approves_financing
+
+    EQUIPMENT ||--o{ INCIDENT_NOTES : has
+    TECHNICIANS ||--o{ INCIDENT_NOTES : writes
+
+    TECHNICIANS ||--o{ FLEET_REPORTS : generates
+    FINANCING_APPLICATIONS ||--o{ FINANCIAL_TRANSACTIONS : generates_disbursement

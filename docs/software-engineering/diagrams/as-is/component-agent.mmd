@@ -1,0 +1,58 @@
+flowchart TB
+    subgraph AgentModule ["agent/ Module Components (AS-IS)"]
+        EntryPoint["agent_step()<br/>Top-level Step Invocation"]
+        PlanInit["initialize_plan()<br/>Static/Dynamic Plan Setup"]
+        PromptAssembler["assemble_system_prompt()<br/>Context, Scratchpad & Tool Injection"]
+        LoopExecutor["execute_step_loop()<br/>Bounded Step Loop (MAX_STEPS=6)"]
+        ModelBuilder["build_structured_model()<br/>Dynamic AgentStep Pydantic Model"]
+        StepHandler["handle_step_result()<br/>Dispatch Tool / Terminal Action"]
+        ToolCaller["tool_call()<br/>FastMCP Payload Packaging"]
+        AlgoRouter["execute_subtask_with_algorithm()<br/>Centralized Algorithm Routing"]
+    end
+
+    subgraph MemoryComponents ["agent/memory/"]
+        STM["ShortTermMemory<br/>Turn-limited message store"]
+        LTM["LongTermMemory<br/>JSON persistence for facts & events"]
+        RouterDecision["decide_memory_fate()<br/>Episodic vs Forget classifier"]
+        SemanticConsol["SemanticConsolidator<br/>LLM-driven fact extraction & conflict resolution"]
+    end
+
+    subgraph ContextComponents ["agent/context.py"]
+        RecurSum["recursive_summarization()<br/>LLM summarizer for turns > keep_recent=6"]
+        SlideWin["sliding_window()"]
+        ObsMask["observation_masking()"]
+        ZonePrune["zone_based_pruning()"]
+    end
+
+    subgraph AlgorithmsSubsystem ["agent/algorithms/"]
+        DAG["decomposition.py<br/>decompose_goal(), execute_plan()"]
+        DynDAG["dynamic_decomposition.py<br/>dynamic_decomposition()"]
+        PS["plan_and_solve.py<br/>plan_and_solve()"]
+        ToT["tree_of_thought.py<br/>tree_of_thoughts()"]
+        LATS["lats.py<br/>lats(), MCTS search"]
+        Reflex["reflexion.py<br/>reflexion() trial loop"]
+        SR["self_refine.py<br/>reflect_and_refine()"]
+        Env["environment.py<br/>GreenfieldEnvironment (Text Regex)"]
+    end
+
+    EntryPoint --> PlanInit
+    EntryPoint --> PromptAssembler
+    EntryPoint --> LoopExecutor
+    LoopExecutor --> RecurSum
+    LoopExecutor --> ModelBuilder
+    LoopExecutor --> StepHandler
+    StepHandler --> ToolCaller
+    PlanInit --> DAG
+    PlanInit --> DynDAG
+    AlgoRouter --> DAG
+    AlgoRouter --> DynDAG
+    AlgoRouter --> PS
+    AlgoRouter --> ToT
+    AlgoRouter --> LATS
+    AlgoRouter --> Reflex
+    AlgoRouter --> SR
+    LATS --> Env
+    Reflex --> Env
+    STM --> RouterDecision
+    RouterDecision --> LTM
+    SemanticConsol --> LTM

@@ -12,6 +12,12 @@ from agent.memory.consolidation import SemanticConsolidator
 from mcp_client.client import create_client
 from agent.algorithms.environment import GreenfieldEnvironment
 from agent.algorithms.decomposition import decompose_goal, execute_plan, final_output
+from agent.workflows.finance_agent import (
+    create_finance_agent,
+    run_finance_turn,
+    fetch_farmer_db_profile,
+)
+from langgraph.checkpoint.memory import MemorySaver
 
 
 # Parse transport mode from CLI args (default to stdio)
@@ -29,7 +35,7 @@ def print_algorithms_menu():
 ================================================================================
            GREENFIELD AGENTIC PLANNING & REASONING ALGORITHMS
 ================================================================================
-All 7 repository algorithms are available for direct execution and evaluation:
+All 8 planning algorithms & state graph workflows are available:
 
 1. Static DAG Decomposition:
    Command: /plan <goal>  (or /dag <goal>)
@@ -58,6 +64,11 @@ All 7 repository algorithms are available for direct execution and evaluation:
 7. Self-Refine:
    Command: /refine <goal> [| <draft>]
    Desc   : Iterative refinement using deterministic checks + independent critic.
+
+8. Autonomous Finance & Lending Agent (LangGraph StateGraph):
+   Command: /finance <request> (or /loan <request>)
+   Desc   : 27-node state machine with real-time underwriting, ToT structuring,
+            HITL manager sign-off, provider integrations, and disbursement verification.
 
 Or type any standard natural language request to run the full Autonomous Support Agent.
 Type 'exit' to quit.
@@ -227,7 +238,102 @@ async def handle_algorithm_command(user_input: str) -> bool:
             print(f"[Self-Refine Error]: {e}\n")
         return True
 
+    # 8. Autonomous Finance & Lending Agent (/finance or /loan)
+    if cmd.startswith("/finance ") or cmd.startswith("/loan ") or cmd.startswith("/fund "):
+        req = cmd.split(" ", 1)[1].strip()
+        await handle_finance_agent_cli(prompt=req)
+        return True
+
     return False
+
+
+async def handle_finance_agent_cli(prompt: str, farmer_id: int = 1):
+    """Executes an interactive turn-by-turn CLI session with the LangGraph Finance Agent."""
+    import uuid
+
+    checkpointer = MemorySaver()
+    graph = create_finance_agent(checkpointer=checkpointer, interactive=True)
+    thread_id = str(uuid.uuid4())[:8]
+
+    farmer_profile = fetch_farmer_db_profile(farmer_id)
+    farmer_name = farmer_profile.get("company_name", f"Farmer #{farmer_id}")
+
+    print(f"\n================================================================================")
+    print(f"   AUTONOMOUS FINANCE STATEGRAPH AGENT (Thread: {thread_id} | Applicant: {farmer_name})")
+    print(f"================================================================================")
+    print(f"Farmer Inquiry: '{prompt}'\n")
+
+    state_input: dict = {"farmer_id": farmer_id, "farmer_request": prompt}
+
+    while True:
+        run_finance_turn(graph, thread_id, state_input)
+        config = {"configurable": {"thread_id": thread_id}}
+        snap = graph.get_state(config)
+
+        # Print latest execution steps trace
+        logs = snap.values.get("execution_log", [])
+        if logs:
+            print("[Execution Trace]: " + " -> ".join([s.split(":")[0] for s in logs[-5:]]))
+
+        next_nodes = list(snap.next) if snap.next else []
+
+        if not next_nodes:
+            out = snap.values.get("final_output") or snap.values.get("recommendation") or "Financial workflow completed."
+            print(f"\n=== Financial Deliverable ===\n{out}\n")
+            break
+
+        current_node = next_nodes[0]
+
+        if current_node == "wait_farmer":
+            docs = snap.values.get("documents_required", ["government_id", "farm_tax_return", "bank_statements", "land_deed_or_lease"])
+            print(f"\n[Checkpoint: Awaiting Verification Documents]")
+            print(f"Required Documents: {', '.join(docs)}")
+            ans = await asyncio.to_thread(input, "Upload verified documents now? [Y/n] (default: Y): ")
+            if ans.strip().lower() in ("n", "no"):
+                print("Document upload cancelled by user.")
+                break
+            state_input = {
+                "documents_submitted": {
+                    "government_id": "id_verified.pdf",
+                    "farm_tax_return": "tax_2025.pdf",
+                    "bank_statements": "bank_statements_6m.pdf",
+                    "land_deed_or_lease": "field_lease.pdf",
+                }
+            }
+
+        elif current_node == "admin_review":
+            analysis = snap.values.get("financial_analysis", {})
+            amt = analysis.get("assessed_amount", 50000.0)
+            dscr = analysis.get("dscr", 1.35)
+            risk = analysis.get("risk_level", "medium")
+            print(f"\n[⚠️ Checkpoint: Senior Admin / HITL Underwriting Review]")
+            print(f"Assessed Amount: ${amt:,.2f} | DSCR: {dscr:.2f} | Risk Rating: {risk.upper()}")
+            ans = await asyncio.to_thread(input, "Administrator Decision [approve / reject] (default: approve): ")
+            dec = "reject" if ans.strip().lower().startswith("r") else "approve"
+            state_input = {"admin_decision": dec}
+
+        elif current_node == "wait_provider":
+            sub = snap.values.get("submitted_application", {})
+            pref = sub.get("provider_reference", "EXT-PROV-101")
+            print(f"\n[Checkpoint: Awaiting Lending Provider Terms (Ref: {pref})]")
+            ans = await asyncio.to_thread(input, "Simulate Provider Decision [approve / reject] (default: approve): ")
+            p_res = "rejected" if ans.strip().lower().startswith("r") else "approved"
+            state_input = {"provider_response": p_res}
+
+        elif current_node == "farmer_confirm":
+            terms = snap.values.get("provider_terms", {})
+            amt = terms.get("approved_amount", 0)
+            ir = terms.get("interest_rate", 0.055) * 100
+            tm = terms.get("term_months", 36)
+            mp = terms.get("monthly_payment", 0)
+            print(f"\n[Checkpoint: Farmer Loan Agreement Confirmation]")
+            print(f"Approved Principal: ${amt:,.2f} | Rate: {ir:.1f}% APR | Horizon: {tm} mos | Mo. Payment: ${mp:,.2f}")
+            ans = await asyncio.to_thread(input, "Farmer accepts and signs terms? [Y/n] (default: Y): ")
+            accept = not ans.strip().lower().startswith("n")
+            state_input = {"farmer_accepts": accept}
+
+        else:
+            state_input = {}
 
 
 async def main():
@@ -238,7 +344,8 @@ async def main():
         print("================================================================================")
         print("                   GREENFIELD AGRICULTURAL DISPATCH AGENT                       ")
         print("================================================================================")
-        print("Type '/algorithms' or '/help' to see and run any of the 7 planning algorithms.")
+        print("Type '/algorithms' or '/help' to see and run any of the 8 planning algorithms.")
+        print("Type '/finance <inquiry>' to run the Autonomous Finance & Lending Agent.")
         print("Type 'exit' to quit.\n")
 
         while True:

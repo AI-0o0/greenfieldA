@@ -1,0 +1,32 @@
+flowchart TB
+    subgraph Users ["Target User Roles"]
+        Dispatcher["Certified Dispatcher<br/>(Daily Fleet Operations)"]
+        Supervisor["Field Supervisor / Manager<br/>(Approvals & Escalations)"]
+        CustomerUser["Farm Customer Portal<br/>(Job Tracking & Payments)"]
+    end
+
+    subgraph TargetGreenfieldSystem ["Greenfield Enterprise Dispatch Platform (TO-BE)"]
+        Gateway["API Gateway / Auth Layer<br/>(FastAPI REST + WebSocket / MCP SSE)"]
+        AgentCore["Autonomous Dispatch & Planning Agent<br/>(LangChain / LangGraph Orchestrator)"]
+        MCPServer["Secure FastMCP Server<br/>(Granular RBAC Tools & Audit Logging)"]
+        PlatformAPI["Platform Backend Service<br/>(FastAPI Platform & Business Logic)"]
+    end
+
+    subgraph ExternalServices ["External Infrastructure & Cloud Providers"]
+        LLMProvider["Multi-Provider LLM Gateway<br/>(Groq / Mistral / OpenAI with Fallbacks)"]
+        PostgreSQL[("Managed Relational DB<br/>(PostgreSQL 16 with Row-Level Security)")]
+        VectorStoreCluster[("ChromaDB / Qdrant Vector Cluster<br/>(Multi-tenant Knowledge & SOPs)")]
+        NotificationService["Notification Service<br/>(SMS / Email / Webhook Alerts)"]
+    end
+
+    Dispatcher -->|"Secure Web Dashboard / CLI"| Gateway
+    Supervisor -->|"Approval Dashboard / Mobile"| Gateway
+    CustomerUser -->|"Customer Portal"| Gateway
+    Gateway --> PlatformAPI
+    Gateway --> AgentCore
+    AgentCore --> MCPServer
+    AgentCore --> LLMProvider
+    MCPServer --> PostgreSQL
+    MCPServer --> VectorStoreCluster
+    PlatformAPI --> PostgreSQL
+    PlatformAPI --> NotificationService

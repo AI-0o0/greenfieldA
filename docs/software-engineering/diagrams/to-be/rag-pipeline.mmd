@@ -1,0 +1,33 @@
+flowchart TB
+    subgraph IngestionEnhancements ["Target Ingestion Pipeline"]
+        DocSource["Agricultural SOPs, Manuals, Regulation PDFs"]
+        SemanticSplitter["Semantic Recursive Splitter<br/>(Markdown / Section Headings Aware)"]
+        MetadataEnricher["Metadata Enricher<br/>(Equipment Types, Chemical IDs, Buffer Rules)"]
+        DenseEmbedder["Embedding Model<br/>(text-embedding-3-small / BAAI/bge-large-en)"]
+        VectorDB[("Persistent ChromaDB / Qdrant<br/>HNSW Cosine Collection with Metadata Index")]
+
+        DocSource --> SemanticSplitter --> MetadataEnricher --> DenseEmbedder --> VectorDB
+    end
+
+    subgraph TargetRetrieval ["Target Multi-Stage Retrieval Pipeline"]
+        UserQuery["Query: 'What is the speed limit for spraying Glyphosate near canals?'"]
+        
+        subgraph MultiSearch ["Hybrid Retrieval Tier"]
+            DenseRetriever["Dense Embedding Query<br/>top_k=8 with metadata filter"]
+            SparseBM25["BM25 Keyword Engine<br/>top_k=8 tokenized"]
+        end
+
+        ReciprocalRank["Reciprocal Rank Fusion (RRF)"]
+        CrossEncoder["Cross-Encoder Reranker<br/>(Cohere Rerank / BGE-Reranker)"]
+        SelfRAGGate["Self-RAG Verifier<br/>(Relevance, Grounding, Non-Hallucination)"]
+        ContextAssembler["Prompt Context Assembler"]
+
+        UserQuery --> DenseRetriever & SparseBM25
+        DenseRetriever --> ReciprocalRank
+        SparseBM25 --> ReciprocalRank
+        ReciprocalRank --> CrossEncoder
+        CrossEncoder --> SelfRAGGate
+        SelfRAGGate -->|"Pass Grounding"| ContextAssembler
+        SelfRAGGate -->|"Fail / Ambiguous"| FallbackQuery["Agentic Query Reformulation"]
+        FallbackQuery --> DenseRetriever
+    end

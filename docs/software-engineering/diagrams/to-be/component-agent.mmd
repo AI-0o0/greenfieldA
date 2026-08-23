@@ -1,0 +1,32 @@
+flowchart TB
+    subgraph AgentTargetArchitecture ["TO-BE Agent Architecture (LangGraph StateGraph)"]
+        StateGraphEngine["LangGraph StateGraph Controller"]
+        
+        subgraph SubTasks ["Agent Pipeline Nodes"]
+            Classifier["Intent & Complexity Classifier Node"]
+            PlannerNode["Planning Node<br/>(Selects DAG, Dynamic, ToT, or LATS)"]
+            ToolSelector["Tool Selection & RBAC Policy Gate"]
+            ToolExecutor["Parallel Tool Invocation Engine"]
+            GroundedValidator["Grounded Database Validator<br/>(Live SQL Checks: Equipment, Buffer, Credit)"]
+            HumanInTheLoop["Human Approval Node (Elicitation / Webhook)"]
+            RefinementNode["Self-Refine & Critic Node"]
+            OutputFormatter["Sanitized Output Formatter"]
+        end
+
+        subgraph EnhancedMemory ["Dual-Tier Memory Manager"]
+            EpisodicBuffer["Episodic Event Buffer (Redis backed)"]
+            SemanticStore["Versioned Semantic Fact Repository"]
+            AutoConsolidator["Background Semantic Consolidator Worker"]
+        end
+    end
+
+    StateGraphEngine --> Classifier
+    Classifier --> PlannerNode
+    PlannerNode --> ToolSelector
+    ToolSelector --> ToolExecutor
+    ToolExecutor --> GroundedValidator
+    GroundedValidator -->|"Safety / Compliance Conflict"| HumanInTheLoop
+    HumanInTheLoop --> ToolExecutor
+    ToolExecutor --> RefinementNode
+    RefinementNode --> OutputFormatter
+    StateGraphEngine <--> EnhancedMemory

@@ -1,0 +1,20 @@
+sequenceDiagram
+    autonumber
+    actor Dispatcher as Dispatcher
+    participant Agent as Agent Orchestrator
+    participant MCP as MCP Server (dispatch_equipment)
+    participant DB as SQLite DB (farm.db)
+    actor Supervisor as Supervisor (Sign-off)
+
+    Dispatcher->>Agent: Request: "Dispatch SPR-3001 to Field 2 for spraying Glyphosate"
+    Agent->>MCP: dispatch_equipment(equipment_id=3, field_id=2, job_type='spray', chemical_id=1, customer_id=1)
+    MCP->>DB: Check Customer (credit_hold == 0)
+    MCP->>DB: Check Field ownership (customer_id == 1)
+    MCP->>DB: Check Equipment status == 'idle'
+    MCP->>DB: Check Chemical hazard class & signoff (requires_signoff == 1)
+    MCP->>Supervisor: Prompt for Sign-off (FastMCP Elicitation)
+    Supervisor-->>MCP: Approved (SignoffResponse.approved = True)
+    MCP->>DB: Record Dispatch_Jobs (status='dispatched', approval_status='approved')
+    MCP->>DB: Update Equipment status='dispatched'
+    MCP-->>Agent: Dispatch confirmation string
+    Agent-->>Dispatcher: Final Answer with job confirmation details

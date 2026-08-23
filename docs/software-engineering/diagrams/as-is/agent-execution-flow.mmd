@@ -1,0 +1,38 @@
+sequenceDiagram
+    autonumber
+    participant Main as main.py
+    participant Agent as agent/agent.py
+    participant Context as agent/context.py
+    participant LLM as Groq BaseChatModel
+    participant MCP as mcp_server/tools.py
+    participant SelfRAG as rag/verifier.py
+    participant Mem as agent/memory/memory.py
+
+    Main->>Agent: agent_step(client, memory, user_input)
+    Agent->>Mem: add_user(user_input)
+    opt Scratchpad Plan Empty
+        Agent->>Agent: initialize_plan(user_input) via DAG decomposition
+    end
+    Agent->>Agent: discover_tools(client)
+    Agent->>SelfRAG: self_rag_verify(facts, user_input)
+    Agent->>Agent: assemble_system_prompt(scratchpad, facts, tools)
+    Agent->>Mem: set_system_prompt()
+
+    loop Step Loop (Step 1 to MAX_STEPS=6)
+        Agent->>Context: recursive_summarization(messages, llm, keep_recent=6)
+        Context-->>Agent: pruned_context
+        Agent->>LLM: ainvoke(pruned_context) with structured AgentStep schema
+        LLM-->>Agent: AgentStep(thought, action, action_input)
+        Agent->>Mem: add_ai(thought, action, input)
+
+        alt Terminal Action (final_answer / end_conversation / escalate)
+            Agent->>SelfRAG: self_rag_verify(query, recent_context, answer)
+            SelfRAG-->>Agent: VerificationResult(is_supported)
+            Agent-->>Main: return AgentStep (Terminal)
+        else Tool Action (e.g. dispatch_equipment, search_agricultural_knowledge)
+            Agent->>MCP: tool_call(client, step)
+            MCP-->>Agent: Tool Observation / Result
+            Agent->>Mem: add_observation(Result)
+            Note over Agent: Continues to next iteration of step loop
+        end
+    end

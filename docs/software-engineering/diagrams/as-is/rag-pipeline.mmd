@@ -1,0 +1,31 @@
+flowchart TB
+    subgraph Ingestion ["Offline Ingestion Pipeline (rag/vector_store.py)"]
+        RawDocs["rag/docs/equipment_manuals.txt"]
+        Chunker["Paragraph Splitter (
+
+)"]
+        Embedder["SentenceTransformer('all-MiniLM-L6-v2')"]
+        ChromaStore[("ChromaDB Collection: 'greenfield_knowledge'<br/>HNSW Cosine Space")]
+
+        RawDocs --> Chunker --> Embedder --> ChromaStore
+    end
+
+    subgraph QueryRuntime ["Runtime Retrieval Pipeline (rag/retrievers.py)"]
+        QueryInput["Query: 'Canal buffer rules for SPR-3001'"]
+        
+        subgraph ParallelRetrieval ["Hybrid Retrieval"]
+            DenseSearch["Dense Vector Search<br/>collection.query(embedding, top_k=3)"]
+            BM25Search["BM25 Keyword Search<br/>BM25Okapi(tokenized_corpus)"]
+        end
+
+        Deduplicator["Deduplicate & Merge: top_k=3 chunks"]
+        SelfRAGVerifier["Self-RAG Verifier (rag/verifier.py)<br/>LLM Relevance & Support Verification"]
+        KnowledgeOutput["Verified Knowledge String / Flag"]
+
+        QueryInput --> DenseSearch
+        QueryInput --> BM25Search
+        DenseSearch --> Deduplicator
+        BM25Search --> Deduplicator
+        Deduplicator --> SelfRAGVerifier
+        SelfRAGVerifier --> KnowledgeOutput
+    end

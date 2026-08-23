@@ -1,0 +1,31 @@
+sequenceDiagram
+    autonumber
+    actor User as Dispatcher (CLI)
+    participant Main as main.py
+    participant Client as mcp_client/client.py
+    participant Server as mcp_server/server.py
+    participant Agent as agent/agent.py
+    participant Mem as agent/memory/memory.py
+    participant Consolidator as agent/memory/consolidation.py
+
+    User->>Main: Launch application (python main.py [stdio])
+    Main->>Client: create_client(mode="stdio")
+    Client->>Server: Spawn subprocess & initialize JSON-RPC
+    Client->>Server: list_tools(), list_resources(), list_prompts()
+    Server-->>Client: Available capabilities
+    Main->>User: Display Welcome Banner & Algorithm Menu
+
+    loop Interactive REPL Loop
+        User->>Main: Enter text input (slash command or natural language)
+        alt Direct Algorithm Command (/plan, /dynamic, /ps, /tot, /lats, /reflexion, /refine)
+            Main->>Agent: handle_algorithm_command(user_input)
+            Agent-->>Main: Algorithm output
+            Main->>User: Display planning/reasoning deliverable
+        else Standard Support Agent Flow
+            Main->>Agent: agent_step(client, memory, user_input)
+            Agent-->>Main: Final AgentStep (action="final_answer")
+            Main->>User: Display Agent Answer
+            Main->>Consolidator: consolidator.run_consolidation_pass()
+            Consolidator->>Mem: Update semantic_facts in long_term_memory.json
+        end
+    end
