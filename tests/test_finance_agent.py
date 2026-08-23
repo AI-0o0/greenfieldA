@@ -2,13 +2,13 @@
 tests/test_finance_agent.py
 
 Unit & Integration Tests for Greenfield Finance Agent Graph.
-Tests all paths in agent/workflows/finance_graph.mmd including Advice, Financing,
+Tests all paths in agent/graphs/finance/finance_graph.mmd including Advice, Financing,
 HITL admin reviews, Document validation loops, Provider responses, and Farmer confirmations.
 """
 
 import pytest
 from langgraph.checkpoint.memory import MemorySaver
-from agent.workflows.finance_agent import (
+from agent.graphs.finance import (
     build_finance_graph,
     create_finance_agent,
     run_finance_turn,
@@ -433,7 +433,7 @@ def test_hitl_task_queue_and_resumption():
     Tests explicit HITL policy triggers opening a task in HITL_Tasks table,
     and platform admin resolving it via resume_hitl_task.
     """
-    from agent.workflows.finance_agent import fetch_pending_hitl_tasks, resume_hitl_task
+    from agent.graphs.finance import fetch_pending_hitl_tasks, resume_hitl_task
 
     mem = MemorySaver()
     graph = create_finance_agent(checkpointer=mem, interactive=True)
@@ -500,7 +500,7 @@ def test_ticket_system_failure_capture_and_recovery():
     Tests that an unplanned mid-node exception is safely caught, persisted into Tickets table,
     and can be resolved & resumed from the exact checkpoint without restarting from the top.
     """
-    from agent.workflows.finance_agent import fetch_tickets, resolve_ticket_and_resume
+    from agent.graphs.finance import fetch_tickets, resolve_ticket_and_resume, update_ticket_status, get_ticket
 
     mem = MemorySaver()
     graph = create_finance_agent(checkpointer=mem, interactive=True)
@@ -536,7 +536,11 @@ def test_ticket_system_failure_capture_and_recovery():
     assert len(matching) > 0
     ticket = matching[0]
     assert "Valuation Service HTTP 503" in ticket["error_message"]
-    assert ticket["status"] == "open"
+    # Test ticket lifecycle: transition from open -> investigating
+    update_ticket_status(ticket["ticket_id"], "investigating", "Admin investigating valuation service outage")
+    t_inv = get_ticket(ticket["ticket_id"])
+    assert t_inv is not None
+    assert t_inv["status"] == "investigating"
 
     # Admin resolves the ticket by patching valid financial analysis and resuming
     patch = {
@@ -621,6 +625,65 @@ def test_document_validation_cycle():
     final_snap = run_finance_turn(graph, thread_id, {"farmer_accepts": True})
     assert has_log(final_snap, "VERIFY")
     assert final_snap.get("transaction_verification", {}).get("verified") is True
+
+
+# ==============================================================================
+# Rubric Test 5: Explicit HITL Policy Rules Evaluation
+# ==============================================================================
+
+def test_hitl_policy_evaluation_rules():
+    """Tests the explicit deterministic evaluation of all 4 HITL escalation triggers."""
+    from agent.graphs.finance import evaluate_hitl_policy
+
+    # 1. Standard low-risk, small loan -> No HITL
+    needed, reasons = evaluate_hitl_policy(amount=25000.0, risk="low", dscr=1.6)
+    assert not needed
+    assert len(reasons) == 0
+
+    # 2. Loan >= $50,000 threshold -> HITL triggered
+    needed, reasons = evaluate_hitl_policy(amount=50000.0, risk="low", dscr=1.6)
+    assert needed
+    assert any("High Capital Exposure" in r for r in reasons)
+
+    # 3. High risk rating -> HITL triggered
+    needed, reasons = evaluate_hitl_policy(amount=30000.0, risk="high", dscr=1.6)
+    assert needed
+    assert any("Elevated Underwriting Risk" in r for r in reasons)
+
+    # 4. DSCR < 1.25 -> HITL triggered
+    needed, reasons = evaluate_hitl_policy(amount=30000.0, risk="low", dscr=1.15)
+    assert needed
+    assert any("Low Debt Service Margin" in r for r in reasons)
+
+    # 5. Specialist escalation -> HITL triggered
+    needed, reasons = evaluate_hitl_policy(amount=20000.0, risk="low", dscr=1.8, specialist_escalated=True)
+    assert needed
+    assert any("Domain Specialist Escalation" in r for r in reasons)
+
+
+# ==============================================================================
+# Rubric Test 6: Package Architecture & Module Exports
+# ==============================================================================
+
+def test_graphs_finance_package_exports():
+    """Ensures all public symbols are correctly exported from agent.graphs.finance."""
+    import agent.graphs.finance as finance_pkg
+
+    assert hasattr(finance_pkg, "create_finance_agent")
+    assert hasattr(finance_pkg, "build_finance_graph")
+    assert hasattr(finance_pkg, "run_finance_turn")
+    assert hasattr(finance_pkg, "FinanceState")
+    assert hasattr(finance_pkg, "get_db_connection")
+    assert hasattr(finance_pkg, "get_sqlite_checkpointer")
+    assert hasattr(finance_pkg, "fetch_pending_hitl_tasks")
+    assert hasattr(finance_pkg, "resume_hitl_task")
+    assert hasattr(finance_pkg, "fetch_tickets")
+    assert hasattr(finance_pkg, "resolve_ticket_and_resume")
+
+    agent = finance_pkg.create_finance_agent(interactive=False)
+    assert agent is not None
+
+
 
 
 
