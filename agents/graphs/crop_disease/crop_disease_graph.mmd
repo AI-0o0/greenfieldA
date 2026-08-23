@@ -1,0 +1,75 @@
+flowchart TD
+    START([Start]) --> COLLECT[Collect Crop Symptoms\n& Metadata]
+
+    COLLECT --> DIAGNOSE[Diagnose Crop Disease\nRAG Search + Self-RAG + LLM]
+
+    DIAGNOSE --> ROUTE_DIAGNOSE{Grounded Diagnosis?}
+
+    %% ==============================================================
+    %% Diagnostic Routing & Retry Loop
+    %% ==============================================================
+
+    ROUTE_DIAGNOSE -->|Grounded| PROPOSE[Propose Treatment\nChemical Whitelist & Equipment Lookup]
+    ROUTE_DIAGNOSE -->|Ungrounded / Retries < 3| DIAGNOSE
+    ROUTE_DIAGNOSE -->|Retries >= 3| FAILURE[Handle Failure\nOpen Ticket in Tickets Table]
+
+    %% ==============================================================
+    %% Treatment Whitelist & Equipment Resolution
+    %% ==============================================================
+
+    PROPOSE --> ROUTE_PROPOSE{Proposal Valid?}
+    ROUTE_PROPOSE -->|Error / No Match / No Sprayer| FAILURE
+    ROUTE_PROPOSE -->|Valid Treatment| HITL_CHECK[HITL Check\nCheck Chemicals.requires_signoff]
+
+    %% ==============================================================
+    %% HITL Gate & Human Sign-off
+    %% ==============================================================
+
+    HITL_CHECK --> HITL_GATE{Requires Sign-off?}
+    HITL_GATE -->|No| FARMER_WAIT[Await Farmer Confirmation]
+    HITL_GATE -->|Yes| HITL_PAUSE{{Wait for Admin Sign-off\nCrop_HITL_Tasks Interrupt}}
+
+    HITL_PAUSE --> ADMIN_DECISION{Admin Decision}
+    ADMIN_DECISION -->|Approved| FARMER_WAIT
+    ADMIN_DECISION -->|Rejected| PROPOSE
+
+    %% ==============================================================
+    %% Farmer Confirmation
+    %% ==============================================================
+
+    FARMER_WAIT --> WAIT_FARMER{{Wait for Farmer Reply\nFarmer Confirmation Interrupt}}
+
+    WAIT_FARMER --> FARMER_DECISION{Farmer Confirmed?}
+    FARMER_DECISION -->|Declined| CLOSE[Close Case]
+    FARMER_DECISION -->|Confirmed| EXECUTE[Execute Treatment\nDispatch Sprayer]
+
+    %% ==============================================================
+    %% Treatment Execution & Dispatch
+    %% ==============================================================
+
+    EXECUTE --> ROUTE_EXECUTE{Dispatch Succeeded?}
+    ROUTE_EXECUTE -->|Dispatch Failed| FAILURE
+    ROUTE_EXECUTE -->|Treatment Started| WAIT_OBSERVATION{{Wait for Follow-up Observation\nPost-Treatment Interrupt}}
+
+    %% ==============================================================
+    %% Treatment Outcome & Monitoring Cycle
+    %% ==============================================================
+
+    WAIT_OBSERVATION --> EVALUATE[Evaluate Treatment Result]
+
+    EVALUATE --> OUTCOME{Treatment Outcome?}
+
+    OUTCOME -->|Recovered| CLOSE
+    OUTCOME -->|Improved| WAIT_OBSERVATION
+    OUTCOME -->|Worsened| RE_DIAGNOSE[Re-Diagnose\nAppend Treatment History]
+    OUTCOME -->|Invalid Observation| FAILURE
+
+    %% Re-diagnosis loop back into diagnostic node
+    RE_DIAGNOSE --> DIAGNOSE
+
+    %% ==============================================================
+    %% Terminal States
+    %% ==============================================================
+
+    FAILURE --> END([End])
+    CLOSE --> END

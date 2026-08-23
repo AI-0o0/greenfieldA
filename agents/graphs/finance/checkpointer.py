@@ -1,5 +1,5 @@
 """
-agent/graphs/finance/checkpointer.py
+agents/graphs/finance/checkpointer.py
 
 Persistent SQLite checkpointer factory for durable state graphs.
 Ensures state is persisted to disk after every node transition and enables
