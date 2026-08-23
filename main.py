@@ -12,7 +12,7 @@ from agent.memory.consolidation import SemanticConsolidator
 from mcp_client.client import create_client
 from agent.algorithms.environment import GreenfieldEnvironment
 from agent.algorithms.decomposition import decompose_goal, execute_plan, final_output
-from agent.workflows.finance_agent import (
+from agent.graphs.finance import (
     create_finance_agent,
     run_finance_turn,
     fetch_farmer_db_profile,

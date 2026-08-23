@@ -54,7 +54,7 @@ class GroundedSQLValidator:
 ---
 
 ## 3. Autonomous Finance Workflow Agent (StateGraph)
-Implements an interactive multi-turn state machine for agricultural finance advisory and loan applications (`agent/workflows/finance_agent.py`):
+Implements an interactive multi-turn state machine for agricultural finance advisory and loan applications (`agent/graphs/finance/`):
 - **Advisory Pathway**: Specialist consultation (`equipment`, `crop`, `general`), single-pass Tree-of-Thoughts (`tot_advice`), Hybrid Search + Self-RAG policy grounding.
 - **Financing Pathway**: Real-time eligibility checking against credit holds, document collection, financial analysis (DSCR / safe borrowing capacity ceiling), HITL admin review (`admin_review`), external provider response evaluation, farmer term confirmation (`farmer_confirm`), and cryptographic SHA-256 disbursement audit logging.
 - **Diagram Reference**: [`diagrams/to-be/workflow-04-finance.mmd`](../diagrams/to-be/workflow-04-finance.mmd)

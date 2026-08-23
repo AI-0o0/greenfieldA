@@ -1,431 +1,52 @@
 """
-agent/workflows/finance_agent.py
+agent/graphs/finance/nodes.py
 
-Autonomous Finance Agent Workflow Graph.
-Implements the LangGraph state machine specified in agent/workflows/finance_graph.mmd.
-Provides interactive human-in-the-loop (HITL) support, Tree-of-Thoughts analysis,
-Self-RAG policy verification, and SQLite persistence.
+Graph node definitions and conditional routers for the Greenfield Autonomous
+Finance StateGraph Agent.
+
+Implements all 27 nodes and transitions specified in finance_graph.mmd across
+both the Financial Advice and Financing Application branches.
 """
 
 from __future__ import annotations
 
 import os
-import json
-import sqlite3
 import hashlib
 import datetime
-import traceback
-from typing import TypedDict, Optional, List, Dict, Any, Literal
-from dotenv import load_dotenv
-from pydantic import BaseModel, Field
-
+from typing import Optional, List, Dict, Any, Literal
 from langchain_core.language_models.chat_models import BaseChatModel
-from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.checkpoint.sqlite import SqliteSaver
 
 from agent.agent import get_base_llm
 from agent.algorithms.tree_of_thought import tree_of_thoughts
 from rag.retrievers import hybrid_search
 from rag.verifier import self_rag_verify
 
-load_dotenv()
+from agent.graphs.finance.state import (
+    FinanceState,
+    RouteDecision,
+    SpecialistDecision,
+    GeneratedOptions,
+    EligibilityEvaluation,
+    DocumentValidation,
+    FinancialAnalysisResult,
+    AlternativeOptionsResult,
+)
+from agent.graphs.finance.db import (
+    get_db_connection,
+    fetch_farmer_db_profile,
+)
+from agent.graphs.finance.hitl import (
+    evaluate_hitl_policy,
+    create_or_update_hitl_task,
+)
 
 
 # ==============================================================================
-# 1. Database Helpers & Persistence
-# ==============================================================================
-
-def get_db_connection(db_path: Optional[str] = None) -> sqlite3.Connection:
-    """Returns a SQLite connection to farm.db, ensuring required tables exist."""
-    db_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "db"))
-    os.makedirs(db_dir, exist_ok=True)
-    target_path = db_path or os.environ.get("GREENFIELD_DB_PATH") or os.path.join(db_dir, "farm.db")
-    conn = sqlite3.connect(target_path, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-
-    # Ensure HITL_Tasks, Tickets, and Agent_Tool_Registry exist
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS HITL_Tasks (
-        task_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        thread_id TEXT NOT NULL,
-        application_id INTEGER,
-        node_name TEXT NOT NULL,
-        reason TEXT NOT NULL,
-        assessed_amount REAL,
-        dscr REAL,
-        risk_level TEXT,
-        state_snapshot TEXT,
-        status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'rejected', 'more_info')),
-        admin_notes TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        resolved_at DATETIME
-    )
-    """)
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS Tickets (
-        ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
-        thread_id TEXT NOT NULL,
-        failed_node TEXT NOT NULL,
-        error_type TEXT NOT NULL,
-        error_message TEXT NOT NULL,
-        state_snapshot TEXT,
-        status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'investigating', 'resolved')),
-        resolution_notes TEXT,
-        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        resolved_at DATETIME
-    )
-    """)
-    conn.execute("""
-    CREATE TABLE IF NOT EXISTS Agent_Tool_Registry (
-        agent_id TEXT NOT NULL,
-        tool_name TEXT NOT NULL,
-        is_enabled BOOLEAN NOT NULL DEFAULT 1,
-        description TEXT,
-        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-        PRIMARY KEY (agent_id, tool_name)
-    )
-    """)
-    conn.commit()
-    return conn
-
-
-def serialize_state_for_db(state: Dict[str, Any]) -> str:
-    """Safely converts state dictionary into a JSON string for DB storage."""
-    def _default(obj: Any) -> Any:
-        if isinstance(obj, (datetime.date, datetime.datetime)):
-            return obj.isoformat()
-        if hasattr(obj, "model_dump"):
-            return obj.model_dump()
-        if hasattr(obj, "dict"):
-            return obj.dict()
-        if isinstance(obj, set):
-            return list(obj)
-        return str(obj)
-    return json.dumps(state, default=_default, indent=2)
-
-
-def get_sqlite_checkpointer(db_path: Optional[str] = None) -> SqliteSaver:
-    """
-    Creates and returns a persistent SqliteSaver checkpointer for durable state
-    persistence across process restarts.
-    """
-    db_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "db"))
-    os.makedirs(db_dir, exist_ok=True)
-    target_path = db_path or os.path.join(db_dir, "checkpoints.sqlite")
-    conn = sqlite3.connect(target_path, check_same_thread=False)
-    return SqliteSaver(conn)
-
-
-def fetch_farmer_db_profile(customer_id: int) -> Dict[str, Any]:
-    """Fetches customer info, fields, credit hold status, and assigned equipment."""
-    with get_db_connection() as conn:
-        customer = conn.execute(
-            "SELECT * FROM Customers WHERE customer_id = ?", (customer_id,)
-        ).fetchone()
-        if not customer:
-            return {}
-
-        fields = conn.execute(
-            "SELECT * FROM Fields WHERE customer_id = ?", (customer_id,)
-        ).fetchall()
-
-        total_area = sum(f["area"] for f in fields) if fields else 0.0
-
-        # Check active equipment on customer fields
-        equipment_rows = conn.execute(
-            """SELECT e.* FROM Equipment e 
-               JOIN Dispatch_Jobs dj ON e.equipment_id = dj.equipment_id 
-               JOIN Fields f ON dj.field_id = f.field_id 
-               WHERE f.customer_id = ?""",
-            (customer_id,),
-        ).fetchall()
-
-        return {
-            "customer_id": customer["customer_id"],
-            "company_name": customer["company_name"],
-            "credit_hold": bool(customer["credit_hold"]),
-            "total_area": total_area,
-            "fields": [dict(f) for f in fields],
-            "active_equipment": [dict(e) for e in equipment_rows],
-        }
-
-
-# ==============================================================================
-# 2. HITL & Ticket Management Helpers
-# ==============================================================================
-
-def record_failure_ticket(
-    thread_id: str,
-    failed_node: str,
-    error: Exception | str,
-    state_snapshot: Dict[str, Any],
-    db_path: Optional[str] = None,
-) -> int:
-    """Records an unplanned mid-node failure into the persistent Tickets table."""
-    err_type = type(error).__name__ if isinstance(error, Exception) else "RuntimeError"
-    err_msg = str(error)
-    snap_json = serialize_state_for_db(state_snapshot)
-    
-    with get_db_connection(db_path) as conn:
-        cursor = conn.execute(
-            """INSERT INTO Tickets 
-               (thread_id, failed_node, error_type, error_message, state_snapshot, status) 
-               VALUES (?, ?, ?, ?, ?, 'open')""",
-            (thread_id, failed_node, err_type, err_msg, snap_json),
-        )
-        conn.commit()
-        return cursor.lastrowid
-
-
-def fetch_tickets(status: Optional[str] = None, db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Retrieves tickets from the Tickets table, optionally filtered by status."""
-    with get_db_connection(db_path) as conn:
-        if status:
-            rows = conn.execute("SELECT * FROM Tickets WHERE status = ? ORDER BY ticket_id DESC", (status,)).fetchall()
-        else:
-            rows = conn.execute("SELECT * FROM Tickets ORDER BY ticket_id DESC").fetchall()
-        return [dict(r) for r in rows]
-
-
-def resolve_ticket_and_resume(
-    ticket_id: int,
-    state_patch: Dict[str, Any],
-    resolution_notes: str = "Resolved by administrator",
-    graph: Optional[Any] = None,
-    checkpointer: Optional[Any] = None,
-    db_path: Optional[str] = None,
-    llm: Optional[BaseChatModel] = None,
-) -> Dict[str, Any]:
-    """
-    Resolves an open failure ticket in the DB, patches the persisted checkpoint state,
-    and resumes execution from the exact checkpoint without re-running completed steps.
-    """
-    with get_db_connection(db_path) as conn:
-        ticket = conn.execute("SELECT * FROM Tickets WHERE ticket_id = ?", (ticket_id,)).fetchone()
-        if not ticket:
-            raise ValueError(f"Ticket #{ticket_id} not found.")
-        
-        thread_id = ticket["thread_id"]
-        conn.execute(
-            """UPDATE Tickets 
-               SET status = 'resolved', resolution_notes = ?, resolved_at = ? 
-               WHERE ticket_id = ?""",
-            (resolution_notes, datetime.datetime.now().isoformat(), ticket_id),
-        )
-        conn.commit()
-
-    active_graph = graph or create_finance_agent(checkpointer=checkpointer, interactive=True, llm=llm, db_path=db_path)
-    patch = {**state_patch, "error": None, "error_traceback": None, "failed_node": None, "ticket_id": None}
-    return run_finance_turn(active_graph, thread_id, patch)
-
-
-def create_or_update_hitl_task(
-    thread_id: str,
-    application_id: Optional[int],
-    reason: str,
-    assessed_amount: float,
-    dscr: float,
-    risk_level: str,
-    state_snapshot: Dict[str, Any],
-    db_path: Optional[str] = None,
-) -> int:
-    """Inserts or updates a pending HITL task in SQLite."""
-    snap_json = serialize_state_for_db(state_snapshot)
-    with get_db_connection(db_path) as conn:
-        existing = conn.execute(
-            "SELECT task_id FROM HITL_Tasks WHERE thread_id = ? AND status = 'pending'",
-            (thread_id,),
-        ).fetchone()
-        if existing:
-            conn.execute(
-                """UPDATE HITL_Tasks 
-                   SET reason = ?, assessed_amount = ?, dscr = ?, risk_level = ?, state_snapshot = ?
-                   WHERE task_id = ?""",
-                (reason, assessed_amount, dscr, risk_level, snap_json, existing["task_id"]),
-            )
-            conn.commit()
-            return existing["task_id"]
-        else:
-            cursor = conn.execute(
-                """INSERT INTO HITL_Tasks 
-                   (thread_id, application_id, node_name, reason, assessed_amount, dscr, risk_level, state_snapshot, status) 
-                   VALUES (?, ?, 'admin_review', ?, ?, ?, ?, ?, 'pending')""",
-                (thread_id, application_id, reason, assessed_amount, dscr, risk_level, snap_json),
-            )
-            conn.commit()
-            return cursor.lastrowid
-
-
-def fetch_pending_hitl_tasks(db_path: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Retrieves all pending HITL tasks."""
-    with get_db_connection(db_path) as conn:
-        rows = conn.execute("SELECT * FROM HITL_Tasks WHERE status = 'pending' ORDER BY task_id DESC").fetchall()
-        return [dict(r) for r in rows]
-
-
-def resume_hitl_task(
-    task_id: int,
-    decision: Literal["approve", "reject", "more_info"],
-    admin_feedback: Optional[str] = None,
-    graph: Optional[Any] = None,
-    checkpointer: Optional[Any] = None,
-    db_path: Optional[str] = None,
-    llm: Optional[BaseChatModel] = None,
-) -> Dict[str, Any]:
-    """
-    Submits an admin HITL decision via the platform, updates the task in the database,
-    and resumes the paused graph run from its checkpoint.
-    """
-    with get_db_connection(db_path) as conn:
-        task = conn.execute("SELECT * FROM HITL_Tasks WHERE task_id = ?", (task_id,)).fetchone()
-        if not task:
-            raise ValueError(f"HITL Task #{task_id} not found.")
-        
-        thread_id = task["thread_id"]
-        status_map = {
-            "approve": "approved",
-            "reject": "rejected",
-            "more_info": "more_info",
-        }
-        conn.execute(
-            """UPDATE HITL_Tasks 
-               SET status = ?, admin_notes = ?, resolved_at = ? 
-               WHERE task_id = ?""",
-            (status_map.get(decision, "approved"), admin_feedback or "", datetime.datetime.now().isoformat(), task_id),
-        )
-        conn.commit()
-
-    active_graph = graph or create_finance_agent(checkpointer=checkpointer, interactive=True, llm=llm, db_path=db_path)
-    update_input = {
-        "admin_decision": decision,
-        "admin_feedback": admin_feedback,
-    }
-    return run_finance_turn(active_graph, thread_id, update_input)
-
-
-# ==============================================================================
-# 3. Pydantic Structured Output Schemas
-# ==============================================================================
-
-class RouteDecision(BaseModel):
-    request_type: Literal["advice", "financing"] = Field(
-        description="Route as 'advice' for financial planning/consultation, or 'financing' for loan/credit applications."
-    )
-    reasoning: str = Field(description="Explanation for the routing classification.")
-
-
-class SpecialistDecision(BaseModel):
-    specialist_type: Literal["equipment", "crop", "no"] = Field(
-        description="'equipment' if machinery/depreciation, 'crop' if harvest/yield/inputs, or 'no' for general finance."
-    )
-    requires_human_escalation: bool = Field(
-        default=False,
-        description="True if the request involves specialized engineering/agronomy requiring human expert input."
-    )
-    reasoning: str = Field(description="Explanation for specialist selection.")
-
-
-class GeneratedOptions(BaseModel):
-    options: List[Dict[str, Any]] = Field(
-        description="List of 2 to 3 candidate financial strategies with name, description, estimated_cost, and pros_cons."
-    )
-    summary: str = Field(description="Overview of the options.")
-
-
-class EligibilityEvaluation(BaseModel):
-    is_eligible: bool = Field(description="True if applicant meets baseline credit and operational requirements.")
-    reasons: List[str] = Field(description="List of eligibility criteria met or violated.")
-    missing_requirements: List[str] = Field(default_factory=list, description="List of missing requirements if ineligible.")
-
-
-class DocumentValidation(BaseModel):
-    is_valid: bool = Field(description="True if all required documents are present and valid.")
-    missing_documents: List[str] = Field(default_factory=list, description="Names of missing required documents.")
-    feedback: str = Field(description="Validation feedback for the applicant.")
-
-
-class FinancialAnalysisResult(BaseModel):
-    assessed_amount: float = Field(description="Assessed funding requirement in USD.")
-    dscr: float = Field(description="Estimated Debt Service Coverage Ratio.")
-    risk_level: Literal["low", "medium", "high"] = Field(description="Risk classification.")
-    recommended_term_months: int = Field(description="Repayment horizon in months.")
-    max_borrowing_capacity: float = Field(description="Maximum safe debt ceiling.")
-
-
-class AlternativeOptionsResult(BaseModel):
-    alternatives: List[Dict[str, Any]] = Field(description="Alternative financing or operational options.")
-    rationale: str = Field(description="Reasoning for why these alternatives are viable.")
-
-
-# ==============================================================================
-# 4. State Schema
-# ==============================================================================
-
-class FinanceState(TypedDict, total=False):
-    # Ingestion & Farmer Info
-    thread_id: Optional[str]
-    farmer_id: Optional[int]
-    farmer_name: Optional[str]
-    farmer_request: str
-    request_type: Optional[Literal["advice", "financing"]]
-    execution_log: List[str]
-
-    # Financial Advice Path
-    financial_context: Dict[str, Any]
-    specialist_type: Optional[Literal["equipment", "crop", "no"]]
-    specialist_data: Dict[str, Any]
-    specialist_escalated: bool
-    financial_options: List[Dict[str, Any]]
-    tot_evaluation: Dict[str, Any]
-    rag_policies: List[str]
-    recommendation: Optional[str]
-
-    # Financing Application Path
-    application_id: Optional[int]
-    eligibility_status: Optional[bool]
-    eligibility_reasons: List[str]
-    eligibility_rag_docs: List[str]
-    rejection_reason: Optional[str]
-    documents_required: List[str]
-    documents_submitted: Dict[str, Any]
-    documents_valid: Optional[bool]
-    validation_feedback: Optional[str]
-
-    # Analysis, HITL & Provider
-    financial_analysis: Dict[str, Any]
-    tot_financing_options: List[Dict[str, Any]]
-    tot_financing_evaluation: Dict[str, Any]
-    hitl_required: bool
-    hitl_task_id: Optional[int]
-    admin_decision: Optional[Literal["approve", "reject", "more_info"]]
-    admin_feedback: Optional[str]
-    submitted_application: Dict[str, Any]
-    provider_response: Optional[Literal["approved", "rejected", "more_info"]]
-    provider_terms: Dict[str, Any]
-    farmer_accepts: Optional[bool]
-    alternative_options: Optional[List[Dict[str, Any]]]
-    process_result: Dict[str, Any]
-    transaction_verification: Dict[str, Any]
-
-    # Failure / Ticket System & Final Outputs
-    current_step: str
-    final_output: Optional[str]
-    error: Optional[str]
-    error_traceback: Optional[str]
-    failed_node: Optional[str]
-    ticket_id: Optional[int]
-    retry_count: Optional[int]
-    simulated_error_node: Optional[str]
-    simulated_error_message: Optional[str]
-
-
-# ==============================================================================
-# 4. Node Implementations
+# 1. Root Ingestion & Request Classification Nodes
 # ==============================================================================
 
 def farmer_request_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [FARMER]: Ingests farmer request, loads customer context from farm.db."""
+    """Node [FARMER]: Ingests farmer request, loads customer profile from farm.db."""
     farmer_id = state.get("farmer_id") or 1
     profile = fetch_farmer_db_profile(farmer_id)
     log = list(state.get("execution_log", []))
@@ -448,7 +69,6 @@ def route_request_node(state: FinanceState, llm: Optional[BaseChatModel] = None)
     active_llm = llm or get_base_llm()
     log = list(state.get("execution_log", []))
 
-    # If already set in state, respect it
     if state.get("request_type"):
         req_type = state["request_type"]
     else:
@@ -463,7 +83,6 @@ or requesting an actual loan / credit line / financing application ('financing')
             decision: RouteDecision = structured_model.invoke([("human", prompt)])
             req_type = decision.request_type
         except Exception:
-            # Fallback heuristic
             lower = req_text.lower()
             if any(w in lower for w in ["loan", "financing", "borrow", "credit", "apply", "fund"]) and not any(w in lower for w in ["how to", "advice", "compare", "options"]):
                 req_type = "financing"
@@ -483,9 +102,9 @@ def route_request_condition(state: FinanceState) -> str:
     return state.get("request_type", "advice")
 
 
-# ------------------------------------------------------------------------------
-# Financial Advice Branch
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 2. Financial Advice Branch Nodes
+# ==============================================================================
 
 def advice_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
     """Node [ADVICE]: Initializes Financial Advice pathway."""
@@ -545,12 +164,12 @@ def specialist_condition(state: FinanceState) -> str:
 
 
 def equipment_agent_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [EQUIPMENT]: Gathers equipment specialist data / human machinery consultation."""
+    """Node [EQUIPMENT]: Gathers equipment specialist data and fleet availability."""
     log = list(state.get("execution_log", []))
     active_llm = llm or get_base_llm()
     req = state.get("farmer_request", "")
 
-    # Fetch equipment context from farm.db or RAG
+    # Fetch equipment context from farm.db
     with get_db_connection() as conn:
         idle_eq = conn.execute("SELECT * FROM Equipment WHERE status = 'idle'").fetchall()
         eq_list = [dict(r) for r in idle_eq]
@@ -578,7 +197,7 @@ and lease vs purchase considerations for the relevant equipment."""
 
 
 def crop_agent_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [CROP]: Gathers crop specialist data / agronomic consultation."""
+    """Node [CROP]: Gathers crop specialist data and agronomic yield projections."""
     log = list(state.get("execution_log", []))
     active_llm = llm or get_base_llm()
     req = state.get("farmer_request", "")
@@ -648,7 +267,7 @@ Return 2 to 3 distinct options with name, estimated_cost or timeline, and pros/c
 
 
 def tot_advice_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [TOT]: Tree-of-Thoughts beam search comparing financial options."""
+    """Node [TOT]: LLM Addition 1 (Tree of Thoughts) beam search comparing financial options."""
     active_llm = llm or get_base_llm()
     log = list(state.get("execution_log", []))
     options = state.get("financial_options", [])
@@ -678,7 +297,7 @@ Options: {options}"""
 
 
 def rag_policies_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [RAG]: Retrieves and verifies agricultural policies and subsidy rules."""
+    """Node [RAG]: LLM Addition 2 (RAG Architecture) retrieves and verifies agricultural policies and subsidy rules."""
     log = list(state.get("execution_log", []))
     req = state.get("farmer_request", "")
 
@@ -764,17 +383,17 @@ Context details:
     }
 
 
-# ------------------------------------------------------------------------------
-# Financing Application Branch
-# ------------------------------------------------------------------------------
+# ==============================================================================
+# 3. Financing Application Branch Nodes
+# ==============================================================================
 
 def financing_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [FINANCING]: Initializes Financing Application pathway."""
+    """Node [FINANCING]: Initializes Financing Application pathway and inserts pending application in DB."""
     log = list(state.get("execution_log", []))
     farmer_id = state.get("farmer_id", 1)
     req = state.get("farmer_request", "")
 
-    # Insert pending application in SQLite
+    # Insert pending application into Financing_Applications
     with get_db_connection() as conn:
         cursor = conn.execute(
             """INSERT INTO Financing_Applications 
@@ -794,7 +413,7 @@ def financing_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> 
 
 
 def check_eligibility_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [ELIGIBILITY]: Checks credit hold and operational eligibility."""
+    """Node [ELIGIBILITY]: Checks database credit hold status and baseline requirements."""
     log = list(state.get("execution_log", []))
     farmer_id = state.get("farmer_id", 1)
 
@@ -813,7 +432,7 @@ def check_eligibility_node(state: FinanceState, llm: Optional[BaseChatModel] = N
         else:
             reasons.append("Credit standing verified: No active credit holds.")
 
-    log.append(f"ELIGIBILITY: Eligibility check complete. Result: {is_eligible}")
+    log.append(f"ELIGIBILITY: Database baseline eligibility check complete. Result: {is_eligible}")
     return {
         "eligibility_status": is_eligible,
         "eligibility_reasons": reasons,
@@ -824,12 +443,32 @@ def check_eligibility_node(state: FinanceState, llm: Optional[BaseChatModel] = N
 
 
 def rag_eligibility_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [RAG_ELIGIBILITY]: Retrieves financing eligibility rules from knowledge base."""
+    """Node [RAG_ELIGIBILITY]: LLM Addition 2 (RAG Architecture) evaluates underwriting policy rules."""
     log = list(state.get("execution_log", []))
-    chunks = hybrid_search("agricultural loan credit eligibility requirements underwriting criteria", top_k=2)
+    farmer_id = state.get("farmer_id", 1)
+    req = state.get("farmer_request", "")
+
+    try:
+        chunks = hybrid_search("agricultural loan credit eligibility requirements underwriting criteria covenants", top_k=2)
+    except Exception:
+        chunks = ["Agricultural Underwriting SOP-FIN-102: Must maintain current account standing without active credit holds."]
+
+    # If already marked ineligible from DB credit hold, preserve rejection reason
+    current_status = state.get("eligibility_status", True)
+    rejection = state.get("rejection_reason")
+
+    if not current_status:
+        log.append(f"RAG_ELIGIBILITY: Preserved baseline ineligible standing ({rejection}) with {len(chunks)} policy docs retrieved")
+        return {
+            "eligibility_rag_docs": chunks,
+            "execution_log": log,
+            "current_step": "RAG_ELIGIBILITY",
+        }
+
     log.append(f"RAG_ELIGIBILITY: Retrieved {len(chunks)} eligibility policy documents")
     return {
         "eligibility_rag_docs": chunks,
+        "eligibility_status": True,
         "execution_log": log,
         "current_step": "RAG_ELIGIBILITY",
     }
@@ -841,12 +480,21 @@ def eligible_condition(state: FinanceState) -> str:
 
 
 def explain_rejection_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [REJECT]: Explains application rejection and suggests remediation steps."""
+    """
+    Node [REJECT]: Explains application rejection and suggests remediation steps.
+    Seamlessly incorporates admin feedback if rejection originated from senior HITL review.
+    """
     active_llm = llm or get_base_llm()
     log = list(state.get("execution_log", []))
-    reason = state.get("rejection_reason") or "Application does not satisfy current agricultural underwriting criteria."
-    app_id = state.get("application_id")
+    admin_feedback = state.get("admin_feedback")
+    base_reason = state.get("rejection_reason") or "Application does not satisfy current agricultural underwriting criteria."
 
+    if admin_feedback:
+        reason = f"Credit Committee Review: {admin_feedback}"
+    else:
+        reason = base_reason
+
+    app_id = state.get("application_id")
     if app_id:
         with get_db_connection() as conn:
             conn.execute(
@@ -864,7 +512,7 @@ Context / Reason: {reason}
 Instructions:
 - Speak directly, naturally, and warmly.
 - Explain the reason clearly without legalistic jargon.
-- Offer 2 constructive next steps (e.g. settling past due balances to restore good credit standing, or adding a secondary co-signer/collateral).
+- Offer 2 constructive next steps (e.g. settling past due balances to restore good credit standing, or adding secondary equipment/land collateral).
 - Encourage them to re-apply as soon as it is resolved."""
 
     try:
@@ -880,7 +528,7 @@ Instructions:
             f"Please feel free to reach back out as soon as your account is updated, and we will be glad to re-evaluate your application!"
         )
 
-    log.append("REJECT: Prepared detailed rejection notice")
+    log.append(f"REJECT: Prepared detailed rejection notice (Reason: {reason})")
     return {
         "rejection_reason": reason,
         "final_output": explanation,
@@ -890,7 +538,7 @@ Instructions:
 
 
 def collect_documents_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [DOCUMENTS]: Compiles required document checklist."""
+    """Node [DOCUMENTS]: Compiles required document checklist and transitions application status in DB."""
     log = list(state.get("execution_log", []))
     required_docs = ["government_id", "farm_tax_return", "bank_statements", "land_deed_or_lease"]
 
@@ -923,7 +571,7 @@ def wait_farmer_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -
 
 
 def validate_documents_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [VALIDATE]: Verifies completeness and validity of submitted documents."""
+    """Node [VALIDATE]: Verifies completeness and validity of submitted documents; routes loop if missing."""
     log = list(state.get("execution_log", []))
     required = set(state.get("documents_required", ["government_id", "farm_tax_return", "bank_statements", "land_deed_or_lease"]))
     submitted = set(state.get("documents_submitted", {}).keys())
@@ -989,13 +637,17 @@ Compute:
 
 
 def tot_financing_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [TOT_FIN]: Tree-of-Thoughts comparison of financing structures & HITL policy evaluation."""
+    """
+    Node [TOT_FIN]: LLM Addition 1 (Tree of Thoughts) compares loan structures
+    and evaluates explicit Human-in-the-Loop policies.
+    """
     active_llm = llm or get_base_llm()
     log = list(state.get("execution_log", []))
     analysis = state.get("financial_analysis", {})
     amount = analysis.get("assessed_amount", 45000.0)
     risk = analysis.get("risk_level", "low")
     dscr = analysis.get("dscr", 1.5)
+    spec_escalated = state.get("specialist_escalated", False)
 
     problem = f"""Compare agricultural financing structures for loan amount ${amount:,.2f}:
 1. 3-year Fixed-rate Equipment Chattel Mortgage (6.2% APR)
@@ -1014,23 +666,15 @@ def tot_financing_node(state: FinanceState, llm: Optional[BaseChatModel] = None)
             "ranked_thoughts": [],
         }
 
-    # ==========================================================================
-    # Explicit HITL Escalation Policies (Rubric Requirement):
-    # 1. Amount >= $50,000 (High capital exposure)
-    # 2. Risk rating == "high" (Underwriting risk exceeds automated approval)
-    # 3. DSCR < 1.25 (Debt service coverage margin below policy floor)
-    # ==========================================================================
-    hitl_reasons = []
-    if amount >= 50000.0:
-        hitl_reasons.append(f"High Capital Exposure: Assessed loan amount ${amount:,.2f} >= $50,000")
-    if risk == "high":
-        hitl_reasons.append("Elevated Risk: Applicant risk rating is classified as High")
-    if dscr < 1.25:
-        hitl_reasons.append(f"Low Debt Service Margin: DSCR ({dscr:.2f}) < 1.25 policy minimum")
+    # Evaluate explicit HITL policy rules
+    hitl_needed, hitl_reasons = evaluate_hitl_policy(
+        amount=amount,
+        risk=risk,
+        dscr=dscr,
+        specialist_escalated=spec_escalated,
+    )
 
-    hitl_needed = len(hitl_reasons) > 0
     hitl_task_id = None
-
     if hitl_needed:
         thread_id = state.get("thread_id") or "finance_thread_default"
         app_id = state.get("application_id")
@@ -1044,7 +688,7 @@ def tot_financing_node(state: FinanceState, llm: Optional[BaseChatModel] = None)
             risk_level=risk,
             state_snapshot=state,
         )
-        log.append(f"TOT_FIN: HITL Escalation triggered -> Task #{hitl_task_id} opened for Admin Review. Reason: {reason_str}")
+        log.append(f"TOT_FIN: HITL Escalation triggered -> Task #{hitl_task_id} opened for Senior Admin Review. Reason: {reason_str}")
     else:
         log.append(f"TOT_FIN: Completed financing structure evaluation (Automated Underwriting Approved, Amount: ${amount:,.2f})")
 
@@ -1063,7 +707,7 @@ def hitl_condition(state: FinanceState) -> str:
 
 
 def admin_review_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [ADMIN]: HITL Admin / Manager sign-off checkpoint."""
+    """Node [ADMIN]: HITL Senior Admin sign-off checkpoint."""
     log = list(state.get("execution_log", []))
     decision = state.get("admin_decision")
     feedback = state.get("admin_feedback")
@@ -1085,7 +729,7 @@ def admin_review_node(state: FinanceState, llm: Optional[BaseChatModel] = None) 
             )
         conn.commit()
 
-    log.append(f"ADMIN: Manager review complete. Decision: '{decision}' (Notes: {feedback or 'None'})")
+    log.append(f"ADMIN: Senior Admin review complete. Decision: '{decision}' (Notes: {feedback or 'None'})")
     return {
         "admin_decision": decision,
         "admin_feedback": feedback,
@@ -1160,7 +804,7 @@ def provider_response_condition(state: FinanceState) -> str:
 
 
 def provider_rejected_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [PROVIDER_REJECTED]: Handles external provider rejection."""
+    """Node [PROVIDER_REJECTED]: Handles external provider rejection and routes to alternative options."""
     log = list(state.get("execution_log", []))
     reason = "Lender debt service threshold exceeded current borrowing limit."
     app_id = state.get("application_id")
@@ -1198,6 +842,8 @@ def farmer_accepts_condition(state: FinanceState) -> str:
     """Conditional router from [CONFIRMED]: 'process' (Yes) or 'alternative' (No)."""
     return "process" if state.get("farmer_accepts", True) else "alternative"
 
+farmer_accept_condition = farmer_accepts_condition
+
 
 def generate_alternatives_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
     """Node [ALTERNATIVE]: Generates fallback alternative options and routes to [RECOMMEND]."""
@@ -1228,14 +874,14 @@ Options should include:
     log.append(f"ALTERNATIVE: Generated {len(alts)} alternative financing options")
     return {
         "alternative_options": alts,
-        "financial_options": alts,  # populated so RECOMMEND node can format them
+        "financial_options": alts,  # Populated so RECOMMEND node can format them
         "execution_log": log,
         "current_step": "ALTERNATIVE",
     }
 
 
 def process_financing_node(state: FinanceState, llm: Optional[BaseChatModel] = None) -> Dict[str, Any]:
-    """Node [PROCESS]: Disburses funds and updates application & customer ledger."""
+    """Node [PROCESS]: Disburses funds and updates application & customer ledger in DB."""
     log = list(state.get("execution_log", []))
     app_id = state.get("application_id")
     farmer_id = state.get("farmer_id", 1)
@@ -1260,7 +906,7 @@ def process_financing_node(state: FinanceState, llm: Optional[BaseChatModel] = N
                 ),
             )
 
-        # Record financial transaction
+        # Record financial disbursement transaction
         conn.execute(
             """INSERT INTO Financial_Transactions 
                (application_id, customer_id, transaction_type, amount, status, verification_hash) 
@@ -1322,273 +968,3 @@ def verify_transaction_node(state: FinanceState, llm: Optional[BaseChatModel] = 
         "execution_log": log,
         "current_step": "VERIFY",
     }
-
-
-class NodeExecutionError(Exception):
-    """Exception raised when an unplanned mid-node failure occurs."""
-    def __init__(self, ticket_id: int, node_name: str, message: str):
-        super().__init__(f"Failure in [{node_name}] -> Ticket #{ticket_id}: {message}")
-        self.ticket_id = ticket_id
-        self.node_name = node_name
-        self.raw_message = message
-
-
-# ==============================================================================
-# 5. Safe Node Execution & Graph Assembly
-# ==============================================================================
-
-def safe_node_execute(
-    node_name: str,
-    node_fn: Any,
-    state: FinanceState,
-    llm: Optional[BaseChatModel] = None,
-) -> Dict[str, Any]:
-    """
-    Executes a node with automatic unplanned failure handling.
-    If an unplanned exception occurs, it captures a failure ticket in SQLite,
-    persists the state snapshot at failure, and raises NodeExecutionError.
-    """
-    sim_node = state.get("simulated_error_node")
-    if sim_node == node_name:
-        err_msg = state.get("simulated_error_message") or f"Simulated failure in node {node_name}"
-        thread_id = state.get("thread_id") or "finance_thread_default"
-        ticket_id = record_failure_ticket(
-            thread_id=thread_id,
-            failed_node=node_name,
-            error=RuntimeError(err_msg),
-            state_snapshot=state,
-        )
-        raise NodeExecutionError(ticket_id=ticket_id, node_name=node_name, message=err_msg)
-
-    try:
-        return node_fn(state, llm=llm)
-    except Exception as exc:
-        thread_id = state.get("thread_id") or "finance_thread_default"
-        ticket_id = record_failure_ticket(
-            thread_id=thread_id,
-            failed_node=node_name,
-            error=exc,
-            state_snapshot=state,
-        )
-        raise NodeExecutionError(ticket_id=ticket_id, node_name=node_name, message=str(exc))
-
-
-
-def build_finance_graph(
-    checkpointer: Optional[Any] = None,
-    interrupt_nodes: Optional[List[str]] = None,
-    llm: Optional[BaseChatModel] = None,
-) -> Any:
-    """
-    Builds and compiles the Greenfield Autonomous Finance Graph.
-    Strictly follows the topology in agent/workflows/finance_graph.mmd.
-    """
-    workflow = StateGraph(FinanceState)
-
-    # 1. Register all nodes with safe execution wrapper
-    workflow.add_node("farmer_request", lambda s: safe_node_execute("farmer_request", farmer_request_node, s, llm=llm))
-    workflow.add_node("route_request", lambda s: safe_node_execute("route_request", route_request_node, s, llm=llm))
-
-    # Advice Nodes
-    workflow.add_node("advice", lambda s: safe_node_execute("advice", advice_node, s, llm=llm))
-    workflow.add_node("collect_context", lambda s: safe_node_execute("collect_context", collect_context_node, s, llm=llm))
-    workflow.add_node("equipment_agent", lambda s: safe_node_execute("equipment_agent", equipment_agent_node, s, llm=llm))
-    workflow.add_node("crop_agent", lambda s: safe_node_execute("crop_agent", crop_agent_node, s, llm=llm))
-    workflow.add_node("generate_options", lambda s: safe_node_execute("generate_options", generate_options_node, s, llm=llm))
-    workflow.add_node("tot_advice", lambda s: safe_node_execute("tot_advice", tot_advice_node, s, llm=llm))
-    workflow.add_node("rag_policies", lambda s: safe_node_execute("rag_policies", rag_policies_node, s, llm=llm))
-    workflow.add_node("recommend", lambda s: safe_node_execute("recommend", generate_recommendation_node, s, llm=llm))
-
-    # Financing Nodes
-    workflow.add_node("financing", lambda s: safe_node_execute("financing", financing_node, s, llm=llm))
-    workflow.add_node("check_eligibility", lambda s: safe_node_execute("check_eligibility", check_eligibility_node, s, llm=llm))
-    workflow.add_node("rag_eligibility", lambda s: safe_node_execute("rag_eligibility", rag_eligibility_node, s, llm=llm))
-    workflow.add_node("explain_rejection", lambda s: safe_node_execute("explain_rejection", explain_rejection_node, s, llm=llm))
-    workflow.add_node("collect_documents", lambda s: safe_node_execute("collect_documents", collect_documents_node, s, llm=llm))
-    workflow.add_node("wait_farmer", lambda s: safe_node_execute("wait_farmer", wait_farmer_node, s, llm=llm))
-    workflow.add_node("validate_documents", lambda s: safe_node_execute("validate_documents", validate_documents_node, s, llm=llm))
-    workflow.add_node("financial_analysis", lambda s: safe_node_execute("financial_analysis", assess_financing_need_node, s, llm=llm))
-    workflow.add_node("tot_financing", lambda s: safe_node_execute("tot_financing", tot_financing_node, s, llm=llm))
-    workflow.add_node("admin_review", lambda s: safe_node_execute("admin_review", admin_review_node, s, llm=llm))
-    workflow.add_node("submit_financing", lambda s: safe_node_execute("submit_financing", submit_financing_node, s, llm=llm))
-    workflow.add_node("wait_provider", lambda s: safe_node_execute("wait_provider", wait_provider_node, s, llm=llm))
-    workflow.add_node("provider_rejected", lambda s: safe_node_execute("provider_rejected", provider_rejected_node, s, llm=llm))
-    workflow.add_node("farmer_confirm", lambda s: safe_node_execute("farmer_confirm", farmer_confirmation_node, s, llm=llm))
-    workflow.add_node("generate_alternatives", lambda s: safe_node_execute("generate_alternatives", generate_alternatives_node, s, llm=llm))
-    workflow.add_node("process_financing", lambda s: safe_node_execute("process_financing", process_financing_node, s, llm=llm))
-    workflow.add_node("verify_transaction", lambda s: safe_node_execute("verify_transaction", verify_transaction_node, s, llm=llm))
-
-    # 2. Add Edges & Conditional Routing
-    workflow.add_edge(START, "farmer_request")
-    workflow.add_edge("farmer_request", "route_request")
-
-    workflow.add_conditional_edges(
-        "route_request",
-        route_request_condition,
-        {
-            "advice": "advice",
-            "financing": "financing",
-        },
-    )
-
-    # Financial Advice Pathway Edges
-    workflow.add_edge("advice", "collect_context")
-    workflow.add_conditional_edges(
-        "collect_context",
-        specialist_condition,
-        {
-            "equipment": "equipment_agent",
-            "crop": "crop_agent",
-            "no": "generate_options",
-        },
-    )
-    workflow.add_edge("equipment_agent", "generate_options")
-    workflow.add_edge("crop_agent", "generate_options")
-    workflow.add_edge("generate_options", "tot_advice")
-    workflow.add_edge("tot_advice", "rag_policies")
-    workflow.add_edge("rag_policies", "recommend")
-    workflow.add_edge("recommend", END)
-
-    # Financing Application Pathway Edges
-    workflow.add_edge("financing", "check_eligibility")
-    workflow.add_edge("check_eligibility", "rag_eligibility")
-    workflow.add_conditional_edges(
-        "rag_eligibility",
-        eligible_condition,
-        {
-            "eligible": "collect_documents",
-            "rejected": "explain_rejection",
-        },
-    )
-    workflow.add_edge("explain_rejection", END)
-
-    workflow.add_edge("collect_documents", "wait_farmer")
-    workflow.add_edge("wait_farmer", "validate_documents")
-    workflow.add_conditional_edges(
-        "validate_documents",
-        documents_valid_condition,
-        {
-            "valid": "financial_analysis",
-            "invalid": "collect_documents",
-        },
-    )
-
-    workflow.add_edge("financial_analysis", "tot_financing")
-    workflow.add_conditional_edges(
-        "tot_financing",
-        hitl_condition,
-        {
-            "admin": "admin_review",
-            "submit": "submit_financing",
-        },
-    )
-
-    workflow.add_conditional_edges(
-        "admin_review",
-        admin_decision_condition,
-        {
-            "approve": "submit_financing",
-            "reject": "explain_rejection",
-            "more_info": "collect_documents",
-        },
-    )
-
-    workflow.add_edge("submit_financing", "wait_provider")
-    workflow.add_conditional_edges(
-        "wait_provider",
-        provider_response_condition,
-        {
-            "approved": "farmer_confirm",
-            "rejected": "provider_rejected",
-            "more_info": "collect_documents",
-        },
-    )
-
-    workflow.add_edge("provider_rejected", "generate_alternatives")
-    workflow.add_edge("generate_alternatives", "recommend")
-
-    workflow.add_conditional_edges(
-        "farmer_confirm",
-        farmer_accept_condition,
-        {
-            "process": "process_financing",
-            "alternative": "generate_alternatives",
-        },
-    )
-
-    workflow.add_edge("process_financing", "verify_transaction")
-    workflow.add_edge("verify_transaction", END)
-
-    # Compile with optional checkpointer and interrupts
-    return workflow.compile(
-        checkpointer=checkpointer,
-        interrupt_before=interrupt_nodes,
-    )
-
-
-# Compatibility alias for router condition
-farmer_accept_condition = farmer_accepts_condition
-
-
-# ==============================================================================
-# 6. Interactive Turn Execution Helpers & Persistence Factories
-# ==============================================================================
-
-def create_finance_agent(
-    checkpointer: Optional[Any] = None,
-    interactive: bool = True,
-    llm: Optional[BaseChatModel] = None,
-    persistent: bool = False,
-    db_path: Optional[str] = None,
-) -> Any:
-    """
-    Factory to create compiled interactive finance graph with durable SQLite persistence support.
-    """
-    if checkpointer is not None:
-        cp = checkpointer
-    elif persistent:
-        cp = get_sqlite_checkpointer(db_path=db_path)
-    elif interactive:
-        cp = MemorySaver()
-    else:
-        cp = None
-
-    interrupts = ["wait_farmer", "admin_review", "wait_provider", "farmer_confirm"] if interactive else None
-    return build_finance_graph(checkpointer=cp, interrupt_nodes=interrupts, llm=llm)
-
-
-def run_finance_turn(
-    graph: Any,
-    thread_id: str,
-    state_input: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    """
-    Executes or resumes a turn on the finance graph for a given thread_id.
-    Ensures thread_id is persisted into state and returns the updated state snapshot.
-    If an unplanned mid-node failure occurs, returns state with ticket details.
-    """
-    config = {"configurable": {"thread_id": thread_id}}
-    input_payload = dict(state_input or {})
-    if "thread_id" not in input_payload:
-        input_payload["thread_id"] = thread_id
-
-    try:
-        state_snap = graph.get_state(config)
-        if state_snap.next:
-            if input_payload:
-                graph.update_state(config, input_payload)
-            return graph.invoke(None, config=config)
-        else:
-            return graph.invoke(input_payload, config=config)
-    except NodeExecutionError as nerr:
-        state_snap = graph.get_state(config)
-        values = dict(state_snap.values or {})
-        values.update({
-            "error": str(nerr),
-            "failed_node": nerr.node_name,
-            "ticket_id": nerr.ticket_id,
-        })
-        return values
-
-
-
