@@ -1,0 +1,164 @@
+[DOC_ID: SOP-FIN-101]
+Policy: Agricultural Credit Standing & Account Eligibility
+Category: Underwriting & Eligibility
+Rules & Guidelines:
+1. Baseline Account Standing: Applicants must maintain an active, unencumbered customer account with zero active credit holds (credit_hold = 0).
+2. Past-Due Balance Threshold: Any outstanding overdue balance exceeding $500 triggers an automated underwriting block until cleared.
+3. Remediation Protocol: Customers under credit hold must provide proof of full settlement or enter an authorized 60-day debt rehabilitation agreement prior to new facility underwriting.
+4. Operational History: A minimum of 1 full operating season (or verified historical crop harvest receipts) is required for unsecured credit lines.
+
+[DOC_ID: SOP-FIN-102]
+Policy: Debt Service Coverage Ratio (DSCR) & Cashflow Underwriting Standards
+Category: Financial Capacity & Risk Assessment
+Rules & Guidelines:
+1. Minimum DSCR Requirements:
+   - Standard Commercial Agricultural Loans: Minimum DSCR of 1.25x (Net Farm Operating Income / Annual Debt Service).
+   - Subsidized & Development Facilities: Minimum DSCR of 1.15x.
+2. DSCR Calculation: Calculated as (Gross Farm Revenue - Operating Expenses + Depreciation) / (Annual Principal + Interest Payments).
+3. Risk Classification:
+   - DSCR >= 1.40: Low Risk (eligible for streamlined automated approval).
+   - DSCR 1.25 - 1.39: Medium Risk (standard loan structures, standard collateral covenants).
+   - DSCR < 1.25: High Risk (requires senior credit committee / HITL review, supplemental collateral, or secondary co-signer).
+4. Maximum Debt Ceiling: Aggregate farm debt service must not exceed 45% of gross annual farm revenue.
+
+[DOC_ID: SOP-FIN-103]
+Policy: Agricultural Loan-to-Value (LTV) & Asset Collateral Standards
+Category: Collateral & Security
+Rules & Guidelines:
+1. Maximum LTV Limits by Asset Class:
+   - Real Estate & Titled Farm Land: Maximum 80% LTV.
+   - New Machinery & Heavy Utility Tractors: Maximum 75% LTV.
+   - Used Machinery (> 3 years operating age): Maximum 65% LTV.
+   - Precision Sprayers, Chemical Applicators & Implements: Maximum 70% LTV with mandatory annual maintenance certification.
+2. Harvest & Crop Liens: First-priority crop liens against registered field harvest yield agreements may be pledged for working capital facilities up to 50% of projected farm-gate revenue.
+3. Subordination: Secondary liens require explicit written authorization from senior lienholders.
+
+[DOC_ID: SOP-FIN-104]
+Policy: Mandatory KYC & Underwriting Verification Document Checklist
+Category: Document Validation & Compliance
+Rules & Guidelines:
+1. Required Verification Documents:
+   - Government-issued Photo Identification (Passport, National ID, or Driver's License) for all primary farm owners.
+   - 2 to 3 years of filed Farm Tax Returns (IRS Schedule F or regional agricultural tax equivalent).
+   - Past 6 months of consecutive business operating bank account statements.
+   - Proof of Land Ownership (registered title/deed) or Certified Multi-Year Agricultural Lease Agreement for all designated operational parcels.
+   - Seasonal Crop Production Budget and historical yield summary.
+2. Document Incompleteness: Applications missing any required verification document are placed in 'pending_documents' status and looped back to the applicant with specific missing item feedback.
+
+[DOC_ID: SOP-FIN-201]
+Policy: Greenfield Agricultural Modernization & Green Equipment Subsidy Program
+Category: Government Subsidies & Grants
+Rules & Guidelines:
+1. Subsidized Interest Rate: Preferential fixed interest rate of 4.5% - 5.5% APR (representing a 200 bps reduction below standard commercial borrowing rates).
+2. Qualifying Assets: Acquisition of Tier 4 Final / low-emission tractors, variable-rate precision chemical sprayers (e.g., SPR-3001), automated yield monitors, and soil-compaction reduction machinery.
+3. Grace Period: Includes a mandatory 6-month seasonal principal grace period, deferring principal amortization until post-harvest cashflow realization.
+4. Covenants: Recipient must agree to utilize precision telemetry logging and maintain equipment according to factory SOPs.
+
+[DOC_ID: SOP-FIN-202]
+Policy: Precision Irrigation & Water Conservation Incentive Grant
+Category: Government Subsidies & Grants
+Rules & Guidelines:
+1. Facility Terms: Subsidized fixed 3.75% - 4.25% APR for terms up to 60 months.
+2. Grant Reimbursement: Up to 25% direct capital cost reimbursement from the regional Agricultural Water Conservation Authority upon verified installation and telemetry connection of high-efficiency drip or pivot irrigation pumps.
+3. Eligibility: Applicable to farm parcels upgrading from flood/furrow irrigation to closed-loop or solar-powered deep well pumping systems.
+
+[DOC_ID: SOP-FIN-203]
+Policy: Seasonal Crop Input Working Capital Credit Line
+Category: Working Capital & Operational Credit
+Rules & Guidelines:
+1. Purpose: Financing certified seed stock, fertilizer compounds, and approved crop protection chemistries prior to planting.
+2. Repayment Schedule: Single bullet principal + accrued interest repayment timed precisely within 30 days post-harvest:
+   - Winter Crop Cycles (Wheat, Barley): Repayment scheduled in Month 6 (June/July).
+   - Summer Crop Cycles (Corn, Soybeans, Cotton): Repayment scheduled in Month 9 (October/November).
+3. Baseline Interest Rate: Fixed 5.0% - 6.0% APR during the active growing season.
+4. Prepayment: Zero penalty for early repayment upon spot crop sale.
+
+[DOC_ID: SOP-FIN-204]
+Policy: Beginning Farmer & Smallholder Assistance Fund
+Category: Subsidies & Inclusive Finance
+Rules & Guidelines:
+1. Target Demographics: Farmers operating fewer than 100 total acres or farm operators with under 5 years of independent operational tenure.
+2. Down Payment Concession: Cash down payment requirement reduced from standard 20% down to 10%.
+3. DSCR Floor: Relaxed underwriting DSCR floor of 1.15x.
+4. Subsidized Interest Ceiling: Capped at 4.0% APR with waived origination fees.
+
+[DOC_ID: SOP-FIN-301]
+Policy: Agricultural Machinery Lease vs. Purchase vs. Custom-Hire Decision Matrix
+Category: Equipment Advisory & Strategy
+Rules & Guidelines:
+1. Operating Lease Recommendation:
+   - Optimal when annual machinery utilization is under 400 operating engine hours per season.
+   - Recommended when farmer prioritizes preserving working capital for variable inputs (seed, chemical, fertilizer).
+   - Full factory warranty, scheduled maintenance, and depreciation risk retained by lessor. 100% tax-deductible as operating expense.
+2. Capital Lease / Chattel Mortgage Loan Recommendation:
+   - Optimal when equipment utilization exceeds 600 operating engine hours per year across multiple fields.
+   - Recommended for core tractors (TRC-2001) where long-term asset retention (> 7 years) and balance sheet equity building are desired.
+3. Custom-Hire / Co-op Equipment Share Recommendation:
+   - Optimal for small parcels (< 50 acres) or specialized single-use implements (e.g. grain harvesters) where capital carrying cost per acre exceeds rental market rates.
+
+[DOC_ID: SOP-FIN-302]
+Policy: Machinery Maintenance Reserve & Fleet Lifecycle Policy
+Category: Operational Advisory
+Rules & Guidelines:
+1. Mandatory Operating Reserves:
+   - Heavy Utility Tractors: $12.00 - $16.00 per operating hour maintenance reserve.
+   - High-Clearance Chemical Sprayers: $15.00 - $22.00 per operating hour maintenance reserve (inclusive of nozzle pressure recalibration every 50 hours).
+2. Economic Replacement Lifecycle: Optimal machinery trade-in / replacement occurs at 5,000 engine operating hours or 5 crop seasons to maximize residual trade-in equity and avoid exponential maintenance depreciation.
+
+[DOC_ID: SOP-FIN-401]
+Policy: Credit Risk Tiering & Interest Rate Pricing Structure
+Category: Pricing & Terms
+Rules & Guidelines:
+1. Tier 1 (Prime / Low Risk):
+   - Criteria: DSCR >= 1.40, LTV <= 65%, clean credit history (0 delinquencies).
+   - Pricing: 4.5% - 5.5% APR. Standard term 24-48 months.
+   - Approval: Automated underwriting approval.
+2. Tier 2 (Standard / Medium Risk):
+   - Criteria: DSCR 1.25 - 1.39, LTV 65% - 75%.
+   - Pricing: 5.5% - 7.0% APR. Standard term 36-60 months.
+   - Approval: Automated approval for amounts < $50,000.
+3. Tier 3 (Subprime / High Risk):
+   - Criteria: DSCR < 1.25, LTV > 75%, or loan amount >= $50,000.
+   - Pricing: 7.0% - 9.0% APR.
+   - Approval: Requires mandatory Senior Credit Committee / Human Admin review.
+
+[DOC_ID: SOP-FIN-402]
+Policy: Human-in-the-Loop (HITL) Senior Credit Committee Escalation Thresholds
+Category: Governance & Risk Controls
+Rules & Guidelines:
+1. Mandatory HITL Review Triggers:
+   - Any financing application with requested/assessed principal amount >= $50,000.00.
+   - Any application classified as High Risk (DSCR < 1.25x or high debt burden).
+   - Any case where an agronomy or equipment domain specialist flagged specialized engineering/operational risk.
+2. Senior Admin Authority:
+   - Approve: Releases application to external lender submission.
+   - Reject: Formulates structured constructive rejection notice with remediation criteria.
+   - Request More Info: Returns application to document collection for supplemental verification or secondary collateral.
+
+[DOC_ID: SOP-FIN-501]
+Policy: Harvest-Synchronized Seasonal Amortization & Repayment Covenants
+Category: Repayment Terms & Cashflow Management
+Rules & Guidelines:
+1. Cashflow Alignment: Repayment schedules for crop production and agricultural equipment must mirror seasonal liquidity.
+2. Payment Frequency Options:
+   - Semi-Annual Amortization: Timed to primary summer and winter harvest revenue peaks.
+   - Annual Bullet Amortization: Permitted for single-crop operations with verified off-take purchase contracts.
+3. Mandatory Grace Periods: Up to 90 days repayment grace period permitted upon documented delayed crop delivery or harvest weather delays without penalty fees.
+
+[DOC_ID: SOP-FIN-502]
+Policy: Drought, Climate & Yield Loss Hardship Forbearance Policy
+Category: Hardship & Risk Management
+Rules & Guidelines:
+1. Hardship Relief: In the event of a federally or regionally declared agricultural natural disaster (drought, flood, hail, pest outbreak), affected farmers in good standing qualify for up to 6 months principal and interest forbearance.
+2. Capitalization Waiver: Interest accrued during the approved emergency forbearance window is not capitalized into loan principal.
+3. Term Extension: Loan maturity horizon extended by the exact duration of the forbearance period.
+
+[DOC_ID: SOP-FIN-503]
+Policy: Fallback Structuring & Prepayment Penalty Waiver Policy
+Category: Alternative Structuring
+Rules & Guidelines:
+1. Provider Rejection Fallbacks: If an external lending provider declines terms, the system must generate structured alternatives:
+   - Downsized Principal Facility (reduced by 25-35% to achieve DSCR compliance).
+   - Co-operative Machinery Lease or Custom-Hire alternative.
+   - Phased disbursement structured around verified seasonal input milestones.
+2. Prepayment Penalty Waiver: 100% waiver of all early payoff and prepayment penalty fees across all agricultural loans.
