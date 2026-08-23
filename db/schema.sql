@@ -282,4 +282,57 @@ CREATE TABLE Financial_Transactions (
     FOREIGN KEY (customer_id)
         REFERENCES Customers(customer_id)
         ON DELETE CASCADE
+);
+
+-- ==========================
+-- HITL Tasks (Human-in-the-Loop Escalation)
+-- ==========================
+CREATE TABLE HITL_Tasks (
+    task_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id TEXT NOT NULL,
+    application_id INTEGER,
+    node_name TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    assessed_amount REAL,
+    dscr REAL,
+    risk_level TEXT,
+    state_snapshot TEXT,
+    status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'approved', 'rejected', 'more_info')),
+    admin_notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME,
+
+    FOREIGN KEY (application_id)
+        REFERENCES Financing_Applications(application_id)
+        ON DELETE SET NULL
+);
+
+-- ==========================
+-- Failure & Recovery Tickets (Unplanned Mid-Node Failures)
+-- ==========================
+CREATE TABLE Tickets (
+    ticket_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    thread_id TEXT NOT NULL,
+    failed_node TEXT NOT NULL,
+    error_type TEXT NOT NULL,
+    error_message TEXT NOT NULL,
+    state_snapshot TEXT,
+    status TEXT NOT NULL DEFAULT 'open'
+        CHECK (status IN ('open', 'investigating', 'resolved')),
+    resolution_notes TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    resolved_at DATETIME
+);
+
+-- ==========================
+-- Agent Tool Registry (Runtime MCP Tool Management)
+-- ==========================
+CREATE TABLE Agent_Tool_Registry (
+    agent_id TEXT NOT NULL,
+    tool_name TEXT NOT NULL,
+    is_enabled BOOLEAN NOT NULL DEFAULT 1,
+    description TEXT,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (agent_id, tool_name)
 );
