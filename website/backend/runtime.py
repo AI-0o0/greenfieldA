@@ -23,6 +23,8 @@ from fastmcp.client.elicitation import ElicitResult
 
 from mcp_server.tool_manager import get_agent_tools
 
+import asyncio
+
 
 async def _decline_elicitation(message, response_type, params, context):
     """
@@ -79,6 +81,7 @@ class Runtime:
         self._clients_lock = threading.Lock()
         self._finance_graph: Optional[Any] = None
         self._crop_graph: Optional[Any] = None
+        self._crop_graph_lock = asyncio.Lock()  # async lock
         self._maintenance_graph: Optional[Any] = None
         self._orchestrator_graph: Optional[Any] = None
         self._llm: Optional[Any] = None
@@ -140,14 +143,14 @@ class Runtime:
         # wait_provider / farmer_confirm.
         return create_finance_agent(persistent=True, interactive=True)
 
-    @property
-    def crop_graph(self):
-        return self._build_sync("_crop_graph", self._make_crop_graph)
-
-    def _make_crop_graph(self):
+    async def get_crop_graph(self) -> Any:
         from agents.graphs.crop_disease.runner import get_crop_agent
 
-        return get_crop_agent(force_rebuild=True)
+        if self._crop_graph is None:
+            async with self._crop_graph_lock:
+                if self._crop_graph is None:
+                    self._crop_graph = await get_crop_agent()
+        return self._crop_graph
 
     @property
     def maintenance_graph(self):

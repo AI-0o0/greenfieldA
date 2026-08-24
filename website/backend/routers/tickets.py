@@ -109,11 +109,11 @@ async def resolve_and_resume(ticket_id: int, body: TicketResolve):
     if owner == "crop_disease":
         from agents.graphs.crop_disease.runner import resolve_crop_ticket_and_resume
 
-        summary = await asyncio.to_thread(
-            resolve_crop_ticket_and_resume,
+        crop_graph = await runtime.get_crop_graph()
+        summary = await resolve_crop_ticket_and_resume(
             ticket_id,
             body.notes or "Resolved by administrator",
-            runtime.crop_graph,
+            crop_graph,
             body.state_patch,
         )
         values = summary.get("values") or {}
