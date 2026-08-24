@@ -27,6 +27,7 @@ from mcp_server.tools import (
     batch_dispatch,
     log_incident_note,
     dispatch_equipment,
+    dispatch_equipment_mcp,
 )
 
 
@@ -37,12 +38,21 @@ mcp = FastMCP("Greenfield-Dispatch-Server")
 # ============================================
 # Tools
 # ============================================
+# NOTE: dispatch_equipment is registered through its wire-safe wrapper
+# (dispatch_equipment_mcp) so the trusted-server-side pre_approved flag is
+# NOT part of the public MCP schema — external clients can never bypass the
+# restricted-chemical sign-off elicitation. See tool_manager.TOOL_LIBRARY.
 
 mcp.tool()(search_agricultural_knowledge)
 mcp.tool()(process_payment)
 mcp.tool()(batch_dispatch)
 mcp.tool()(log_incident_note)
-mcp.tool()(dispatch_equipment)
+mcp.tool(name="dispatch_equipment")(dispatch_equipment_mcp)
+
+# Runtime registration / deregistration of every other library tool
+# (generate_fleet_report, get_equipment_status, ...) plus per-agent gating
+# lives in mcp_server/tool_manager.py and is driven from the platform.
+from mcp_server.tool_manager import TOOL_LIBRARY  # noqa: E402
 
 # ============================================
 # Resources
@@ -164,9 +174,16 @@ def draft_delay_explanation(dispatch_id: int) -> str:
   
 if __name__ == "__main__":
     transport = sys.argv[1] if len(sys.argv) > 1 else "stdio"
-    if transport == "stdio":
-        sys.stderr.write("Starting Greenfield Server [stdio]...")
-        mcp.run(transport="stdio")
-    elif transport == "http":
+    if transport == "http":
+        # Platform mode: seed Agent_Tool_Registry and sync the live tool set
+        # before serving, so admin-managed state is authoritative from boot.
+        from mcp_server.tool_manager import bootstrap
+
+        bootstrap()
         sys.stderr.write("Starting Greenfield Server [http:8080]...")
         mcp.run(transport="streamable-http", host="0.0.0.0", port=8080)
+    else:
+        if transport != "stdio":
+            sys.stderr.write(f"Unknown transport '{transport}', falling back to stdio.")
+        sys.stderr.write("Starting Greenfield Server [stdio]...")
+        mcp.run(transport="stdio")

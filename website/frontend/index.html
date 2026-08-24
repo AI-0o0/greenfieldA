@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Greenfield Agricultural Agency — Agent Platform</title>
+<link rel="stylesheet" href="/static/styles.css" />
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="brand-mark">GF</div>
+    <div>
+      <h1>Greenfield Agricultural Agency</h1>
+      <p class="tagline">Autonomous Agents · MCP Server · State-Graph Platform</p>
+    </div>
+  </div>
+  <nav class="role-switch" id="role-switch">
+    <button class="role-btn active" data-role="user">User Console</button>
+    <button class="role-btn" data-role="admin">Admin Console</button>
+  </nav>
+  <div class="server-pill" id="server-pill" title="Live MCP endpoint">MCP: —</div>
+</header>
+
+<!-- =========================================================
+     USER CONSOLE
+========================================================= -->
+<main id="view-user" class="view">
+  <aside class="agent-sidebar">
+    <div class="sidebar-head">
+      <h2>Agents</h2>
+      <button id="new-thread-btn" class="ghost-btn" title="Start a new conversation with this agent">+ New thread</button>
+    </div>
+    <div id="agent-list" class="agent-list"></div>
+    <div class="sidebar-note">
+      Threads are checkpointed to durable storage — closing the browser or
+      restarting the server never loses an ongoing case.
+    </div>
+  </aside>
+
+  <section class="chat-pane">
+    <div class="chat-header" id="chat-header">
+      <div>
+        <h2 id="chat-agent-name">Select an agent</h2>
+        <p id="chat-agent-meta" class="muted"></p>
+      </div>
+      <div style="display:flex;align-items:center;gap:0.75rem;">
+        <span id="thread-chip" class="chip hidden"></span>
+        <button id="clear-chat-btn" class="ghost-btn" style="border:1px solid var(--line);padding:0.35rem 0.75rem;border-radius:8px;font-size:0.85rem;cursor:pointer;background:transparent;color:var(--text);" title="Clear conversation history and start a fresh thread">Clear Chat</button>
+      </div>
+    </div>
+
+    <div id="messages" class="messages">
+      <div class="empty-state">
+        <h3>Pick an agent on the left and start talking.</h3>
+        <p>Every agent runs against the live MCP server and the real farm database.</p>
+      </div>
+    </div>
+
+    <div id="attachment-bar" class="attachment-bar hidden"></div>
+
+    <form id="chat-form" class="chat-input" autocomplete="off">
+      <div class="chat-input-wrapper">
+        <input type="file" id="file-upload-input" multiple style="display:none;" />
+        <button type="button" id="btn-attach-files" class="btn-attach" title="Attach real PDF or image documents">📎</button>
+        <input id="chat-text" type="text" placeholder="Type your message or click an action below…" disabled />
+        <button type="submit" id="chat-send" disabled>Send</button>
+      </div>
+    </form>
+  </section>
+</main>
+
+<!-- =========================================================
+     ADMIN CONSOLE
+========================================================= -->
+<main id="view-admin" class="view hidden">
+  <nav class="admin-tabs">
+    <button class="tab-btn active" data-tab="tools">Tools per agent</button>
+    <button class="tab-btn" data-tab="documents">RAG documents</button>
+    <button class="tab-btn" data-tab="hitl">Approvals (HITL) <span id="hitl-badge" class="badge hidden">0</span></button>
+    <button class="tab-btn" data-tab="tickets">Failure tickets <span id="ticket-badge" class="badge hidden">0</span></button>
+  </nav>
+
+  <!-- Tools -->
+  <section id="tab-tools" class="admin-section">
+    <div class="section-head">
+      <h2>MCP tools × agents</h2>
+      <p class="muted">Toggling a box updates <code>Agent_Tool_Registry</code> and re-syncs the
+        <strong>live</strong> MCP server (register/deregister at runtime).</p>
+    </div>
+    <div class="panel-grid">
+      <div class="card wide"><div class="table-wrap" id="tool-matrix">Loading…</div></div>
+      <div class="card">
+        <h3>Live server tools/list</h3>
+        <ul id="live-tools" class="plain-list"></ul>
+        <p class="muted small">This is read from the running FastMCP instance — watch it change as you toggle.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Documents -->
+  <section id="tab-documents" class="admin-section hidden">
+    <div class="section-head">
+      <h2>Knowledge base documents</h2>
+      <p class="muted">Added/removed documents are immediately reflected in what the
+        Knowledge Assistant retrieves on its next query.</p>
+    </div>
+    <div class="panel-grid">
+      <div class="card"><div id="doc-list" class="doc-list">Loading…</div></div>
+      <div class="card">
+        <h3>Add document</h3>
+        <form id="doc-form">
+          <label>Source name<input id="doc-name" type="text" placeholder="irrigation_policy.txt" required /></label>
+          <label>Or pick a .txt / .md file<input id="doc-file" type="file" accept=".txt,.md,.markdown,text/plain" /></label>
+          <textarea id="doc-text" rows="9" placeholder="Paste content here (blank lines separate chunks)…"></textarea>
+          <button type="submit">Ingest into vector store</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <!-- HITL -->
+  <section id="tab-hitl" class="admin-section hidden">
+    <div class="section-head">
+      <h2>Human-in-the-loop approvals</h2>
+      <p class="muted">Paused state-graph runs waiting for a decision the agent is not allowed to make alone.</p>
+    </div>
+    <div id="hitl-list" class="stack">Loading…</div>
+  </section>
+
+  <!-- Tickets -->
+  <section id="tab-tickets" class="admin-section hidden">
+    <div class="section-head">
+      <h2>Failure &amp; recovery tickets</h2>
+      <p class="muted">Unplanned mid-node failures captured with their exact checkpoint. Resuming re-enters at the failed stage.</p>
+    </div>
+    <div id="ticket-list" class="stack">Loading…</div>
+  </section>
+</main>
+
+<div id="toast" class="toast hidden"></div>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

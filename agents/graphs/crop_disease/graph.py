@@ -182,10 +182,18 @@ def build_crop_disease_graph(
     if checkpointer is not None:
         cp = checkpointer
     else:
+        # NOTE: own the sqlite3 connection explicitly instead of
+        # `SqliteSaver.from_conn_string(...).__enter__()`. The context manager
+        # object would be garbage-collected as soon as this function returns,
+        # which finalizes the suspended generator and silently CLOSES the
+        # database mid-process. Same pattern as finance/checkpointer.py.
+        import sqlite3
+
         db_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "db"))
+        os.makedirs(db_dir, exist_ok=True)
         target_db_path = db_path or os.environ.get("GREENFIELD_DB_PATH") or os.path.join(db_dir, "farm.db")
-        checkpointer_cm = SqliteSaver.from_conn_string(target_db_path)
-        cp = checkpointer_cm.__enter__()  # kept open for process lifetime
+        conn = sqlite3.connect(target_db_path, check_same_thread=False)
+        cp = SqliteSaver(conn)
 
     graph = builder.compile(checkpointer=cp)
     return graph

@@ -1,151 +1,274 @@
-# Greenfield Dispatch & Fleet Logistics Planning Agent
-## Decomposition & Planning Lab: Autonomous Multi-Field Agricultural Scheduling
+# Greenfield Agricultural Agency — Autonomous Multi-Agent Platform
+## Final Project: Persistent Recoverable State, Dynamic Multi-Agent Orchestration & Full-Stack Platform
 
 ---
 
-## 1. Problem Identification & Operational Rationale
+## 1. Executive Summary & Operational Rationale
 
-### The Real-World Planning Problem
-In high-throughput agricultural operations at **Greenfield Agricultural Agency**, daily field operations (tilling, harvesting, and restricted chemical spraying) are governed by coupled physical, regulatory, and mechanical constraints:
-1. **Fleet & Implement Compatibility:** Tractors, high-clearance sprayers (`SPR-3001`), and combines have distinct hitch attachments, operational statuses (`idle`, `dispatched`, `maintenance`), and soil-compaction limits.
-2. **Environmental & Safety Regulations:** Restricted chemical spraying is illegal when wind speeds exceed **15 km/h** (spray drift risk) or within **15m of irrigation canals** and **50m of organic boundaries** (`SOP-CHEM-4040`).
-3. **Personnel & Customer Constraints:** Only certified technician dispatchers can execute restricted applications, and dispatches are blocked if a customer has an active credit hold.
+High-throughput agricultural operations at **Greenfield Agricultural Agency** require coordinated decisions across biology, machinery, finance, and logistics:
+- **Crop Health & Pathology:** Diagnosing crop blights, selecting compliant treatments against chemical hazard registries, and monitoring recovery over multiple growth cycles.
+- **Fleet Mechanics & Maintenance:** Diagnosing machinery breakdowns, sourcing parts, scheduling field technicians, and verifying repairs before dispatch.
+- **Agricultural Finance & Lending:** Underwriting multi-thousand dollar operating loans, validating farm tax returns, checking debt-service ratios, and managing capital exposure.
+- **Fleet Logistics Planning:** Reshuffling daily field dispatches across hundreds of acres under weather, wind drift, and canal buffer constraints.
 
-**The Recurring Failure Point:** Multiple times a week, unforeseen operational disruptions occur—a primary sprayer suffers a hydraulic failure, unexpected 18 km/h wind gusts arise across northern fields, or flash-rain forecasts demand emergency harvest preemption. The logistics dispatcher must **completely reshuffle and re-plan the day's multi-field dispatch board**.
-
-### Why This is a Planning Problem (Not Memory, Not RAG, Not Single-Shot)
-* **Beyond Single Tool Calls:** A safe dispatch requires checking customer credit, verifying technician certification, validating wind/canal buffer constraints, and selecting alternative idle machines before dispatching.
-* **Beyond RAG:** RAG retrieves static policy texts (e.g., "15m canal buffer required"). It cannot dynamically optimize multi-machine routes or resolve conflicting field priorities.
-* **Beyond Memory:** Memory stores past notes and holds. It cannot explore permutations of candidate schedules under real-time resource contention.
-* **High Cost of Plan Failure:** A bad plan causes chemical drift lawsuits, equipment compaction damage, or emergency harvest delays costing hundreds of thousands of dollars.
+### Why Simple Scripts & Monolithic Agents Fail
+1. **Real-World Work Spans Days & Weeks:** Workflows cannot execute start-to-finish in one pass. They must pause and wait on external physical events (lab results, parts deliveries, technician on-site visits, loan provider responses).
+2. **Strict Regulatory & Financial Safety Gates:** Irreversible actions (spraying restricted neurotoxic chemicals, authorizing repairs exceeding $500, disbursing loans $\ge \$50\text{k}$) must pause for **Human-in-the-Loop (HITL)** manager approval.
+3. **Mid-Node Failure Is Costly:** An unexpected API timeout, network drop, or process crash must not restart the entire multi-day case from scratch. State must be **persisted at every transition** and recoverable from the exact point of failure.
+4. **Domain Complexity Requires Specialization:** A single prompt cannot act as agronomist, mechanic, underwriter, and front-desk agent without hallucinating and mixing tools. Specialized agents must operate with **least-privilege bounded contexts** and hand off tasks dynamically.
 
 ---
 
-## 2. Architecture & Decomposition Stack
+## 2. High-Level System Architecture
 
 ```
-                          ┌───────────────────────────────────────────────┐
-                          │    Top-Level Request / Operational Shock      │
-                          │  "SPR-3001 broke down + Wind Advisory Field 4"│
-                          └───────────────────────┬───────────────────────┘
-                                                  │
-                       ┌──────────────────────────┴──────────────────────────┐
-                       ▼                                                     ▼
-          [Decomposition-First (Static DAG)]                     [Dynamic / Interleaved DAG]
-          • One-shot DAG plan generation                         • Step-by-step observation loop
-          • Strict topological sort execution                    • Dynamically pivots if step fails
-                       │                                                     │
-                       └──────────────────────────┬──────────────────────────┘
-                                                  │
-            ┌─────────────────────────────────────┼─────────────────────────────────────┐
-            ▼                                     ▼                                     ▼
-     [Plan-and-Solve (PS)]              [Tree of Thoughts (ToT)]                 [Grounded LATS]
-     • Linear calculation tasks         • Combinatorial ranking                • High-stakes final dispatch
-     • Acreage / dosage math            • Priority sorting under               • Multi-step candidate rollout
-     • Low latency & token cost           constrained technician capacity      • Verified by DB & buffer rules
-            │                                     │                                     │
-            └─────────────────────────────────────┼─────────────────────────────────────┘
-                                                  │
-                       ┌──────────────────────────┴──────────────────────────┐
-                       ▼                                                     ▼
-            [Self-Refine (Fast Loop)]                              [Reflexion (Deep Loop)]
-            • Single-draft rubric critique                         • Multi-trial search with memory buffer
-            • Technician work-order formatting                     • Multi-resource allocation conflicts
-```
-
----
-
-## 3. Implementation of the Five Core Concerns
-
-### 1. Task Decomposition (Static DAG vs. Dynamic Interleaved)
-* **Static DAG (`algorithms/decomposition.py`):** Generates an upfront acyclic dependency graph, validates acyclicity via topological sort (detecting cycles at construction time), and executes sub-tasks in dependency order.
-* **Dynamic Decomposition (`algorithms/dynamic_decomposition.py`):** Generates subsequent sub-tasks conditionally after observing intermediate execution outputs.
-* **The Divergence Case:** When sprayer `SPR-3001` breaks down, Static DAG plans to reroute `SPR-3002` immediately. Dynamic Decomposition queries `farm.db` in sub-task 1, discovers `SPR-3002` is already committed to high-priority Field 7, and **dynamically shifts course** to evaluate tractor `TRC-202` with a spray implement. Static DAG executes blindly and errors out at tool dispatch.
-
-### 2. Planning Algorithms & Sub-Task Routing
-* **Plan-and-Solve (`algorithms/plan_and_solve.py`):** Routed to deterministic, linear sub-tasks (e.g., computing chemical tank mix ratios and fuel requirements). Minimal latency (0.9s) and single LLM turn.
-* **Tree of Thoughts (`algorithms/tree_of_thought.py`):** Routed to multi-criteria prioritization (e.g., ordering 5 queued fields under a 1-technician availability limit). Explores candidate sequences via BFS/DFS, scoring by crop vulnerability and weather windows.
-* **LATS (`algorithms/lats.py`):** Routed to the high-stakes final fleet dispatch proposal. Uses Monte Carlo Tree Search (Select, Expand, Simulate, Reflect, Backpropagate) guided by real external environmental feedback.
-
-### 3. Self-Correction Scopes (Self-Refine vs. Reflexion)
-* **Self-Refine (`algorithms/self_refine.py`):** Cheap single-pass drafting and rubric critique for technician work orders and incident summaries (verifying PPE, nozzle pressure limits, and boundary warnings).
-* **Reflexion (`algorithms/reflexion.py`):** Multi-trial constraint satisfaction with an episodic buffer. When a candidate dispatch violates soil moisture limits on wet Field 10, Reflexion stores a verbal reflection (*"Attempt 1 failed: TRC-205 causes soil compaction on wet soil; use lightweight TRC-201"*) and passes it into subsequent attempts.
-
-### 4. Grounded vs. Ungrounded Validation (`algorithms/environment.py`)
-* **The Danger of Ungrounded Evaluation:** Ungrounded LLM self-evaluation hallucinates that all machines are free and overlooks canal proximity.
-* **Grounded `GreenfieldEnvironment`:** Evaluates candidate states against real ground truth:
-  1. Real SQLite table checks (`Equipment.status == 'idle'`, `Customers.credit_hold == 0`).
-  2. Agricultural domain rules (15 km/h wind limits, mandatory 15m canal buffer, 50m organic boundary).
-* **Caught Failure Case:** An ungrounded critic approves spraying `Parathion` on Field 5. The grounded validator identifies Field 5's 10m proximity to an irrigation canal, penalizes the state with a `-0.35` score drop, and forces the search agent to select a low-hazard chemical alternative.
-
----
-
-## 4. Cost & Quality Comparison Benchmark
-
-### A. Top-Level Decomposition Benchmark: Reshuffling Tuesday's Board (20 Real Cases)
-| Method | Task Success | Avg. LLM Calls | Avg. Tokens | Avg. Latency | Est. Cost / Run | Verdict & Deployment Decision |
-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Decomposition-First (Static DAG)** | 14/20 (70%) | 1 plan + 4 nodes | 6,100 | 3.1s | $0.04 | Fast for routine jobs, but blind to mid-execution DB state changes. |
-| **Dynamic Decomposition** | **17/20 (85%)** | ~7 (varies) | 8,900 | 5.4s | $0.06 | **Production Winner:** Essential for top-level reshuffle to react to dynamic blockers. |
-
-### B. Sub-Task Planning Algorithms: Ranking & Proposal (15 Real Cases)
-| Method | Sub-Task Success | Avg. LLM Calls | Avg. Tokens | Avg. Latency | Est. Cost / Run | Architectural Verdict |
-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Plan-and-Solve (Ranking)** | 11/15 (73%) | 1 | 1,400 | 0.9s | $0.01 | Fails complex combinatorial trade-offs; best for linear calculations. |
-| **Tree of Thoughts (Ranking)** | **14/15 (93%)** | 9 | 5,200 | 3.8s | $0.04 | **Production Winner for Ranking:** Evaluates multiple valid field sequences. |
-| **LATS (Ungrounded Default)** | 9/15 (60%) | 11 | 7,600 | 6.2s | $0.06 | Unsafe theater: hallucinated scores approve illegal spray dispatches. |
-| **LATS (Grounded Environment)** | **14/15 (93%)** | 13 | 8,300 | 6.9s | $0.07 | **Production Winner for Final Proposal:** Hard DB & safety verification. |
-
----
-
-## 5. Locatable Codebase Structure
-
-```
-greenfield-mcp-dispatch/
-├── algorithms/
-│   ├── decomposition.py          # Static DAG generation, topological sort & cycle check
-│   ├── dynamic_decomposition.py  # Adaptive step-by-step dynamic decomposition
-│   ├── plan_and_solve.py         # Plan-and-Solve linear planning algorithm
-│   ├── tree_of_thought.py        # Tree of Thoughts (BFS/DFS search over permutations)
-│   ├── lats.py                   # Language Agent Tree Search with MCTS & reflections
-│   ├── self_refine.py            # Single-pass draft, critique, and refine loop
-│   ├── reflexion.py              # Multi-trial search carrying episodic reflection memory
-│   └── environment.py            # Grounded GreenfieldEnvironment (DB + domain validator)
-├── agent/
-│   ├── agent.py                  # Fleet planning agent & sub-task routing coordinator
-│   └── schema.py                 # Pydantic schemas for DAG nodes and step actions
-├── db/
-│   ├── farm.db                   # SQLite database (Equipment, Fields, Customers, Jobs)
-│   ├── schema.sql                # Relational schema with safety & status constraints
-│   └── seed.sql                  # Production seed data
-├── server/
-│   ├── server.py                 # FastMCP dispatch server
-│   └── tools.py                  # Atomic MCP tools (dispatch_equipment, process_payment)
-├── demo.py                       # Full benchmark harness executing all 5 lab concerns
-└── README.md                     # Architectural documentation & evaluation report
+                                  ┌────────────────────────────────────────────────────────┐
+                                  │      Greenfield Agricultural Agency Web Platform       │
+                                  │         FastAPI (:8000) + Vanilla Static SPA (/)       │
+                                  └──────────────────────────┬─────────────────────────────┘
+                                                             │
+            ┌────────────────────────────────────────────────┼────────────────────────────────────────────────┐
+            ▼                                                ▼                                                ▼
+┌───────────────────────────────┐        ┌────────────────────────────────┐        ┌───────────────────────────────────┐
+│ User Console (Chat SPA)       │        │ Admin Console (Management SPA) │        │ Live Greenfield MCP Server        │
+│ • 6-Agent Switcher            │        │ • Live Tool Matrix (Toggle)    │        │ Mounted at /mcp                   │
+│ • Master Orchestrator Mode    │        │ • Dynamic RAG Document Manager │        │ Atomic Tools & Tool Registry      │
+│ • Durable SQLite Threads      │        │ • Unified HITL Approvals Queue │        │ Streamable HTTP ASGI App          │
+│ • Paused / Ticket Banners     │        │ • Failure & Recovery Tickets   │        │ FastMCP Provider Sync             │
+└───────────────────────────────┘        └────────────────────────────────┘        └───────────────────────────────────┘
+                                                             │
+                                                             ▼
+                                  ┌────────────────────────────────────────────────────────┐
+                                  │              Unified Runtime & Seams Engine            │
+                                  │   (Shared Client, Gated Clients, SQLite Checkpointers) │
+                                  └──────────────────────────┬─────────────────────────────┘
+                                                             │
+            ┌────────────────────────────────────────────────┼────────────────────────────────────────────────┐
+            ▼                                                ▼                                                ▼
+┌───────────────────────────────┐        ┌────────────────────────────────┐        ┌───────────────────────────────────┐
+│ 1. Crop Disease Clinic        │        │ 2. Equipment Maintenance       │        │ 3. Finance & Lending Advisor      │
+│ (agents/graphs/crop_disease)  │        │ (agents/graphs/maintenance)    │        │ (agents/graphs/finance)           │
+│ • RAG (+ Self-RAG)            │        │ • Task Decomposition           │        │ • Tree of Thoughts                │
+│ • Whitelist Constrained ReAct │        │ • Manuals & SOPs RAG           │        │ • Underwriting Policy RAG         │
+│ • HITL: Restricted Chemicals  │        │ • HITL: Cost > $500            │        │ • HITL: Loan >= $50k / DSCR<1.25  │
+│ • Ticket: Retries Exhausted   │        │ • Ticket: Parts API Error      │        │ • Ticket: Valuation API 503       │
+└───────────────────────────────┘        └────────────────────────────────┘        └───────────────────────────────────┘
+            │                                                │                                                │
+            └────────────────────────────────────────────────┼────────────────────────────────────────────────┘
+                                                             │
+                                                             ▼
+                                  ┌────────────────────────────────────────────────────────┐
+                                  │ Master Multi-Agent Orchestrator (agents/orchestrator.py)│
+                                  │ Dynamic LangGraph Command(goto=...) Handoff Network    │
+                                  └──────────────────────────┬─────────────────────────────┘
+                                                             │
+            ┌────────────────────────────────────────────────┴────────────────────────────────────────────────┐
+            ▼                                                                                                 ▼
+┌───────────────────────────────────────────────┐                               ┌───────────────────────────────────────────────┐
+│ 4. Knowledge & Memory Assistant (Prior Lab)   │                               │ 5. Fleet Planning & Dispatch (Prior Lab)      │
+│ • Front-Desk Conversational Interface         │                               │ • Multi-field Dispatch Reshuffle Board        │
+│ • ReAct over Gated MCP Tools                  │                               │ • Static & Dynamic DAG Decomposition          │
+│ • Short/Long-Term Semantic & Episodic Memory  │                               │ • Plan-and-Solve, ToT, Grounded LATS, Reflexion│
+└───────────────────────────────────────────────┘                               └───────────────────────────────────────────────┘
 ```
 
 ---
 
-## 6. How to Run the Evaluation & Benchmarks
+## 3. The Three Stateful State-Graph Problems
 
-### 1. Environment Setup
+### Problem 1: Crop Disease Clinic & Multi-Visit Treatment (`agents/graphs/crop_disease`)
+- **Operational Reality:** Plant diseases (rust, powdery mildew, blight) require multi-visit intervention spanning days. Chemical spraying requires safety validation, farmer consent, and multi-round field observation loops.
+- **Why Stateful:**
+  1. Spans days between initial spray and follow-up field observations (`awaiting_observation`).
+  2. Branches conditionally based on post-treatment observations (`recovered` $\rightarrow$ close, `improved` $\rightarrow$ continue monitoring, `worsened` $\rightarrow$ re-diagnose with accumulated history).
+  3. Pauses for mandatory safety sign-off before dispatching restricted chemicals.
+- **Two LLM Additions:**
+  1. **RAG + Self-RAG Grounding Verification:** Retrieves disease manuals from vector store; Self-RAG validates retrieved chunk relevance and filters out hallucinations.
+  2. **Whitelist-Constrained ReAct:** Validates chemical options against the live `Chemicals` table and verifies idle sprayer availability in `Equipment`.
+- **HITL Policy:** Chemical with `requires_signoff = 1` or hazard class `restricted` / `controlled` immediately halts execution and files a task in `Crop_HITL_Tasks`.
+- **Failure Recovery:** Diagnostic retry budget exhaustion ($\ge 3$ ungrounded attempts) or sprayer dispatch error opens an inspectable ticket in `Tickets`.
+
+### Problem 2: Agricultural Financing & Multi-Turn Lending Workflow (`agents/graphs/finance`)
+- **Operational Reality:** Farm financing applications cannot complete in a single turn. They require document uploads, underwriting policy checks, credit committee reviews, external provider decisions, and farmer term acceptance.
+- **Why Stateful:**
+  1. Explicit multi-turn waiting states: `wait_farmer` (document submission), `wait_provider` (external lending institution response), and `farmer_confirm` (accepting loan APR & terms).
+  2. Remediation cycles: Missing documents loop back from `validate_documents` to `collect_documents`.
+  3. Provider rejections branch into alternative loan option generation.
+- **Two LLM Additions:**
+  1. **Tree of Thoughts (ToT):** Explores combinatorial credit permutations, assessing debt-service coverage ratios ($\text{DSCR}$), loan terms, and risk ratings.
+  2. **Policy RAG:** Ingests internal underwriting policies (`agricultural_finance_policies.txt`) to enforce collateral rules and debt limits.
+- **HITL Policy:** Applications triggering high capital exposure (amount $\ge \$50,000$), low debt margin ($\text{DSCR} < 1.25$), or elevated risk rating halt at `admin_review` and file a task in `HITL_Tasks`.
+- **Failure Recovery:** Unplanned valuation API failures (503 Service Unavailable) or appraisal calculation errors open a ticket in `Tickets`.
+
+### Problem 3: Equipment Maintenance & Repair Workflow (`agents/graphs/maintenance`)
+- **Operational Reality:** Machinery breakdowns (sprayer pump leaks, tractor transmission slippage) require a multi-day lifecycle: intake, troubleshooting, task decomposition, technician on-site visits, spare parts shipments, and field load testing.
+- **Why Stateful:**
+  1. Spans days waiting for field technician arrival (`awaiting_technician_visit`) and supplier parts shipment (`awaiting_parts_delivery`).
+  2. Operational testing loop (`awaiting_testing_confirmation`): `passed` $\rightarrow$ restores equipment status to `idle`; `failed` $\rightarrow$ loops back to re-diagnosis.
+- **Two LLM Additions:**
+  1. **Task Decomposition:** Decomposes complex repair into 4 ordered operational milestones: `[1. Physical Inspection & Teardown, 2. Parts Sourcing & Delivery, 3. Component Assembly & Torque Calibration, 4. Operational Load Testing]`.
+  2. **Manuals & SOPs RAG:** Queries ChromaDB for equipment manuals (`equipment_manuals.txt`) to diagnose root cause and identify required part numbers.
+- **HITL Policy:** Total estimated repair cost (parts + labor) exceeding **$500.00** halts execution at `hitl_cost_approval` and files a task in `HITL_Tasks`.
+- **Failure Recovery:** External parts inventory API timeouts (504) or technician scheduling conflicts open a ticket in `Tickets`.
+
+---
+
+## 4. Dynamic Multi-Agent Orchestration & Dynamic Handoffs
+
+### Why Multi-Agent Collaboration with Dynamic Handoffs is Essential
+In production enterprise architectures, a monolithic "god-agent" fails for four fundamental reasons:
+1. **Domain Specialization & Cognitive Isolation:** An agronomist diagnosing plant pathology needs disease manuals and symptom prompts; a mechanic needs hydraulic torque specs and parts catalogs; a financial underwriter needs amortization math and credit policies. Combining all tools into one agent causes prompt bloat, tool confusion, and severe hallucinations.
+2. **Context & State Segregation (Least Privilege):** Each agent maintains an isolated, typed state schema (`CaseState`, `FinanceState`, `MaintenanceState`) preventing private financial data or complex mechanical logs from leaking into unrelated conversations.
+3. **Dynamic vs. Brittle Static Pipelines:** Real-world farm operations branch unpredictably. A conversation starting with crop yellowing may reveal an underlying sprayer defect, which in turn uncovers high repair costs that necessitate a repair loan. A static DAG cannot handle this dynamic emergence; a **Dynamic Handoff Network** can.
+4. **Auditability & Clear Departmental Ownership:** Every handoff is an explicit `Command(goto=target_agent, update={...})` transition recorded in durable SQLite storage with full timestamps and reasoning.
+
+### The Real-World Cross-Domain Case Study
+
+```
+┌──────────────┐
+│ Farmer Inquiry│ "My wheat field is failing because sprayer SPR-3001 had a hydraulic breakdown.
+└──────┬───────┘  We need to fix the sprayer and arrange financing if it's expensive."
+       │
+       ▼
+┌────────────────────────────────────────────────────────┐
+│ 1. Front-Desk Conversational Agent (agents/agent.py)   │ Welcomes farmer with memory context.
+│                                                        │ Dynamic Handoff: transfer_to_crop_disease
+└───────────────────────┬────────────────────────────────┘
+                        │ Command(goto="crop_disease")
+                        ▼
+┌────────────────────────────────────────────────────────┐
+│ 2. Crop Disease Clinic (agents/graphs/crop_disease)    │ Diagnoses uneven chemical application.
+│                                                        │ Identifies root cause as sprayer pressure loss.
+│                                                        │ Dynamic Handoff: transfer_to_maintenance
+└───────────────────────┬────────────────────────────────┘
+                        │ Command(goto="maintenance")
+                        ▼
+┌────────────────────────────────────────────────────────┐
+│ 3. Equipment Maintenance (agents/graphs/maintenance)   │ RAG manual lookup & 4-stage repair plan.
+│                                                        │ Estimates hydraulic pump overhaul = $1,200 (> $500 HITL).
+│                                                        │ Dynamic Handoff: transfer_to_finance
+└───────────────────────┬────────────────────────────────┘
+                        │ Command(goto="finance")
+                        ▼
+┌────────────────────────────────────────────────────────┐
+│ 4. Finance Advisor (agents/graphs/finance)             │ Underwrites $1,200 repair loan (12-mo @ 5.25% APR).
+│                                                        │ Approves credit facility and prepares terms.
+│                                                        │ Dynamic Handoff: transfer_to_frontdesk
+└───────────────────────┬────────────────────────────────┘
+                        │ Command(goto="frontdesk")
+                        ▼
+┌────────────────────────────────────────────────────────┐
+│ 5. Front-Desk Synthesis (agents/agent.py)              │ Synthesizes biological diagnosis, repair schedule,
+│                                                        │ and loan terms into a clear, comforting response.
+└───────────────────────┬────────────────────────────────┘
+                        │
+                        ▼
+┌──────────────┐
+│ Farmer Clarity│ Complete multi-department resolution delivered in a single unified session!
+└──────────────┘
+```
+
+---
+
+## 5. Strict Principle of Least Privilege: Context & Tool Scoping
+
+To prevent unauthorized operations and context contamination, tool access and context visibility are strictly enforced across two layers:
+1. **API & Database Tool Gating (`Agent_Tool_Registry`):** The runtime wraps the shared MCP client in a `GatedMCPClient` that validates tool permissions on every call.
+2. **State & Memory Boundary Gating:** Each state graph operates on its own scoped schema.
+
+```
+                                      AGENT TOOL PERMISSION MATRIX
+┌───────────────────────┬──────────────┬──────────────┬──────────────┬──────────────┬──────────────┬──────────────┐
+│ MCP Tool Name         │ Front-Desk   │ Crop Disease │ Maintenance  │ Finance      │ Fleet Plan   │ Master Orch  │
+├───────────────────────┼──────────────┼──────────────┼──────────────┼──────────────┼──────────────┼──────────────┤
+│ search_agricultural_kn│   ENABLED    │   ENABLED    │   ENABLED    │   ENABLED    │   ENABLED    │   ENABLED    │
+│ log_incident_note     │   ENABLED    │   ENABLED    │   ENABLED    │   DISABLED   │   DISABLED   │   ENABLED    │
+│ dispatch_equipment    │   DISABLED   │   ENABLED    │   DISABLED   │   DISABLED   │   DISABLED   │   DISABLED   │
+│ get_equipment_status  │   DISABLED   │   DISABLED   │   ENABLED    │   DISABLED   │   ENABLED    │   ENABLED    │
+│ process_payment       │   DISABLED   │   DISABLED   │   DISABLED   │   ENABLED    │   DISABLED   │   DISABLED   │
+│ batch_dispatch        │   DISABLED   │   DISABLED   │   DISABLED   │   DISABLED   │   ENABLED    │   DISABLED   │
+│ generate_fleet_report │   DISABLED   │   DISABLED   │   DISABLED   │   DISABLED   │   ENABLED    │   DISABLED   │
+└───────────────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┴──────────────┘
+```
+
+---
+
+## 6. Durable Persistence & Crash-Recovery Proof
+
+All state graphs and the orchestrator are wired to durable SQLite checkpointers (`langgraph-checkpoint-sqlite`) on `db/farm.db`. 
+
+### Crash-and-Resume Verification
+When the platform process is terminated mid-run (e.g. `SIGKILL`, crash, power failure):
+1. Every state transition has already been committed to `db/farm.db`.
+2. Upon process restart, `graph.get_state(config)` reloads the exact node location, variables, and interrupt payload.
+3. Resuming execution proceeds directly from the pending interrupt or failed checkpoint without re-running any completed nodes.
+
+---
+
+## 7. Web Platform & API Reference
+
+The platform provides a single FastAPI service (`website/backend/main.py`) hosting the live FastMCP endpoint at `/mcp` and the static single-page application at `/`.
+
+### REST API Endpoints
+
+| Method | Endpoint | Description |
+| :--- | :--- | :--- |
+| `GET` | `/api/health` | Healthcheck returning MCP endpoint status and graph readiness |
+| `GET` | `/api/agents` | Lists all 6 configured agents with descriptions, techniques, and wait states |
+| `POST` | `/api/threads/new?agent_id={id}` | Creates a new durable conversation thread |
+| `POST` | `/api/chat` | Unified chat dispatch routing turns to the active agent |
+| `GET` | `/api/admin/tools` | Fetches the full Agent Tool Matrix and live server `tools/list` |
+| `POST` | `/api/admin/tools/toggle` | Toggles tool enablement for an agent with immediate live FastMCP sync |
+| `GET` | `/api/admin/tools/verify` | Verifies registry consistency against live server visibility |
+| `GET` | `/api/admin/documents` | Lists all ingested knowledge base documents with chunk counts |
+| `POST` | `/api/admin/documents` | Ingests a `.txt` document into ChromaDB with deterministic chunk IDs |
+| `DELETE`| `/api/admin/documents/{name}` | Deletes all chunks for a document; immediately reflected in next retrieval |
+| `GET` | `/api/hitl` | Lists all pending and resolved HITL approval tasks across all graphs |
+| `GET` | `/api/hitl/{kind}/{task_id}` | Detailed inspection of a HITL task including full state snapshot |
+| `POST` | `/api/hitl/{kind}/{task_id}/resolve` | Resolves a HITL task (`approve` / `reject` / `more_info`) and resumes run |
+| `GET` | `/api/tickets` | Lists all open, investigating, and resolved failure tickets |
+| `POST` | `/api/tickets/{id}/investigate` | Updates ticket status to `investigating` with admin notes |
+| `POST` | `/api/tickets/{id}/resolve` | Resolves failure ticket with optional state patch and resumes from checkpoint |
+| `GET` | `/api/threads/{agent_id}/{thread_id}` | Non-advancing state snapshot inspector for thread state debugging |
+
+---
+
+## 8. Extension and Correction of Prior Labs
+
+This project directly reuses and corrects all prior course deliverables:
+- **MCP Server Lab:** Corrected port drift between client and server (`:8000` vs `:8080`) by standardizing in `config.py`. Added dynamic runtime tool registration/deregistration in `mcp_server/tool_manager.py`.
+- **Memory & RAG Lab:** Extended ChromaDB vector store in `rag/vector_store.py` with runtime document listing, ingestion, and deletion immediately queried by `knowledge_assistant`.
+- **Decomposition & Planning Lab:** Preserved all planning algorithms (Static DAG, Dynamic DAG, Plan-and-Solve, Tree of Thoughts, Grounded LATS, Reflexion, Self-Refine) within `fleet_planner`.
+
+---
+
+## 9. Getting Started & Verification Guide
+
+### 1. Environment Setup & Dependencies
 ```bash
-# Clone the repository and install dependencies
+# Clone repository
 git clone https://github.com/your-org/greenfield-mcp-dispatch.git
 cd greenfield-mcp-dispatch
+
+# Install dependencies using uv
 uv sync
 ```
 
 ### 2. Configure Environment Variables
-Create a `.env` file with your LLM credentials:
+Create a `.env` file in the project root:
 ```bash
 GROQ_API_KEY=your_groq_api_key_here
 GREENFIELD_DB_PATH=db/farm.db
 ```
 
-### 3. Run the Full Decomposition & Planning Benchmark
+### 3. Launch the Web Platform
 ```bash
-python demo.py
+uv run uvicorn website.backend.main:app --host 127.0.0.1 --port 8000
 ```
-This executes the 20 top-level Tuesday dispatch board cases and 15 sub-task ranking evaluations, outputting evaluation traces to `artifacts/` and generating comparative metrics.
+Open your browser at `http://127.0.0.1:8000` to interact with both the **User Console** and **Admin Console**.
+
+### 4. Run the Full Test Suite
+```bash
+# Run all unit and integration tests across state graphs and platform
+uv run pytest
+```

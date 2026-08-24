@@ -245,13 +245,12 @@ def propose_treatment(state: CaseState) -> dict:
     try:
         cursor = conn.cursor()
 
-        # --- Resolve candidate names against the real whitelist (Chemicals table) ---
         chemical_row = None
         for name in candidate_names:
             cursor.execute(
                 "SELECT chemical_id, name, hazard_class, requires_signoff "
-                "FROM Chemicals WHERE name = ?",
-                (name,),
+                "FROM Chemicals WHERE LOWER(name) = LOWER(?) OR LOWER(name) LIKE LOWER(?)",
+                (name, f"%{name}%"),
             )
             row = cursor.fetchone()
             if row:
@@ -259,10 +258,6 @@ def propose_treatment(state: CaseState) -> dict:
                 break  # first whitelist match wins
 
         if chemical_row is None:
-            # None of the model's recommended names exist in the real
-            # Chemicals table — this is a genuine failure, not something
-            # a retry fixes on its own, since the model needs real data
-            # to work from. Route to handle_failure via the graph edge.
             updates = {
                 "status": "propose_treatment",
                 "proposed_treatment": {
@@ -308,9 +303,6 @@ def propose_treatment(state: CaseState) -> dict:
     updates = {
         "status": "propose_treatment",
         "proposed_treatment": proposed_treatment,
-        # hitl_required is derived straight from the whitelist data,
-        # not decided by the model — hitl_check will read this table
-        # value again itself before pausing, this is just a preview flag.
         "hitl_required": bool(chemical_row["requires_signoff"]),
     }
     _persist_case(state, **updates)
@@ -318,33 +310,20 @@ def propose_treatment(state: CaseState) -> dict:
 
 def hitl_check(state: CaseState) -> dict:
     """
-    Authoritative HITL gate. Re-reads Chemicals.requires_signoff directly
-    from the DB (does not trust proposed_treatment's cached preview flag,
-    in case the treatment was revised without re-running propose_treatment).
+    Authoritative HITL gate.
 
-    If sign-off is required, this node:
       1. Writes a row to Crop_HITL_Tasks with the full state snapshot.
       2. Calls interrupt() — this pauses graph execution and persists
          the checkpoint. The graph process can be killed here and the
          run will resume from this exact point once the admin acts.
       3. On resume, interrupt() returns the value the platform passed
-         in when it resumed the run (the admin's decision).
+         to Command(resume=...), e.g. {"approved": True, "notes": "OK"}.
+      4. Writes the resolution back to Crop_HITL_Tasks.
 
-    This is the ONLY HITL pause for chemical sign-off in this graph.
-    dispatch_equipment's own internal elicitation must be bypassed when
-    called from execute_treatment, since approval already happened here.
+    If sign-off is not required (requires_signoff == 0), the node does
+    nothing and returns immediately with hitl_status="not_required".
     """
     proposed_treatment = state["proposed_treatment"]
-
-    if proposed_treatment.get("error"):
-        # Defensive guard — propose_treatment failed upstream, this
-        # node shouldn't have been reached. Graph wiring should route
-        # errors to handle_failure before hitl_check.
-        return {
-            "status": "hitl_check",
-            "proposed_treatment": proposed_treatment,
-        }
-
     chemical_id = proposed_treatment["chemical_id"]
 
     conn = get_db_connection()
@@ -355,10 +334,9 @@ def hitl_check(state: CaseState) -> dict:
             (chemical_id,),
         )
         row = cursor.fetchone()
+        requires_signoff = bool(row["requires_signoff"]) if row else False
     finally:
         conn.close()
-
-    requires_signoff = bool(row["requires_signoff"]) if row else False
 
     if not requires_signoff:
         updates = {
@@ -370,11 +348,11 @@ def hitl_check(state: CaseState) -> dict:
         return updates
 
     # --- Sign-off required: open a Crop_HITL_Tasks row and pause ---
-    import json # Added locally just in case it wasn't at the top
+    import json
     state_snapshot = json.dumps(
         {
             "case_id": state["case_id"],
-            "diagnosis": state["diagnosis"],
+            "diagnosis": state.get("diagnosis"),
             "proposed_treatment": proposed_treatment,
         }
     )
@@ -392,8 +370,8 @@ def hitl_check(state: CaseState) -> dict:
                 state.get("thread_id", ""),
                 state["case_id"],
                 "hitl_check",
-                f"Chemical '{proposed_treatment['chemical_name']}' "
-                f"(hazard class: {proposed_treatment['hazard_class']}) "
+                f"Chemical '{proposed_treatment.get('chemical_name', 'restricted')}' "
+                f"(hazard class: {proposed_treatment.get('hazard_class', 'restricted')}) "
                 f"requires human sign-off before dispatch.",
                 state_snapshot,
             ),
@@ -403,17 +381,16 @@ def hitl_check(state: CaseState) -> dict:
     finally:
         conn.close()
 
-    updates = {
+    updates_before = {
         "status": "awaiting_hitl",
         "hitl_required": True,
         "hitl_status": "pending",
         "hitl_task_id": task_id,
     }
-    _persist_case(state, **updates)
+    _persist_case(state, **updates_before)
 
-    # Pause here. The platform resumes this thread later with the
-    # admin's decision, e.g. {"approved": True, "notes": "..."} or
-    # {"approved": False, "notes": "..."}.
+    # Pause here. Platform resumes this thread later via:
+    #   Command(resume={"approved": True|False, "notes": "..."})
     admin_decision = interrupt(
         {
             "reason": "chemical_signoff_required",
@@ -494,9 +471,6 @@ async def execute_treatment(state: CaseState) -> dict:
     """
     proposed_treatment = state["proposed_treatment"]
 
-    # Node-side guard: only proceed if hitl_check either wasn't required,
-    # or was required and explicitly approved. This is the safety net
-    # that replaces dispatch_equipment's own now-bypassed elicitation.
     if state.get("hitl_required") and state.get("hitl_status") != "approved":
         updates = {
             "status": "execute_treatment",

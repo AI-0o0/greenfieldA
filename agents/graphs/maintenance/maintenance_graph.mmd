@@ -1,0 +1,51 @@
+flowchart TD
+    START([Start]) --> COLLECT[Collect Maintenance Request\n& Malfunction Intake]
+
+    COLLECT --> DIAGNOSE[Diagnose from Manuals\nRAG Vector Store Search]
+
+    DIAGNOSE --> DECOMPOSE[Decompose Maintenance Plan\nTask Decomposition Milestones]
+
+    DECOMPOSE --> ESTIMATE[Estimate Parts & Labor Cost\nCheck $500 Threshold]
+
+    ESTIMATE --> HITL_CHECK{Total Cost > $500?}
+
+    %% ==============================================================
+    %% HITL Financial Approval
+    %% ==============================================================
+    HITL_CHECK -->|No| SCHEDULE[Schedule Technician Visit]
+    HITL_CHECK -->|Yes| HITL_PAUSE{{Wait for Manager Sign-off\nHITL_Tasks Interrupt}}
+
+    HITL_PAUSE --> HITL_DECISION{Manager Decision}
+    HITL_DECISION -->|Approved| SCHEDULE
+    HITL_DECISION -->|Rejected| CLOSE[Close Case]
+
+    %% ==============================================================
+    %% Logistics & Execution Waits
+    %% ==============================================================
+    SCHEDULE --> WAIT_TECH{{Wait for Technician On-Site\nAwaiting Tech Visit Interrupt}}
+
+    WAIT_TECH --> ORDER_PARTS[Order Spare Parts\nInventory Check]
+
+    ORDER_PARTS --> ROUTE_PARTS{Inventory Lookup?}
+    ROUTE_PARTS -->|API Error / 504| FAILURE[Handle Failure\nOpen Ticket in Tickets Table]
+    ROUTE_PARTS -->|Parts Available| WAIT_DELIVERY{{Wait for Parts Delivery\nAwaiting Delivery Interrupt}}
+
+    WAIT_DELIVERY --> EXECUTE[Execute Maintenance\nSet Equipment Status = maintenance]
+
+    EXECUTE --> WAIT_TEST{{Wait for Operational Testing\nAwaiting Field Test Interrupt}}
+
+    %% ==============================================================
+    %% Operational Testing Evaluation & Re-diagnosis
+    %% ==============================================================
+    WAIT_TEST --> EVALUATE[Evaluate Operational Test]
+
+    EVALUATE --> TEST_OUTCOME{Field Test Result?}
+    TEST_OUTCOME -->|Passed| CLOSE
+    TEST_OUTCOME -->|Failed| DIAGNOSE
+    TEST_OUTCOME -->|Invalid| FAILURE
+
+    %% ==============================================================
+    %% Terminal States
+    %% ==============================================================
+    CLOSE --> END([End])
+    FAILURE --> END

@@ -60,10 +60,16 @@ async def create_client(mode: str = "stdio"):
             }
         }
     elif mode == "http":
+        try:
+            from config import MCP_SERVER_URL
+        except ImportError:
+            MCP_SERVER_URL = os.environ.get(
+                "GREENFIELD_MCP_URL", "http://127.0.0.1:8080/mcp"
+            )
         config = {
             "mcpServers": {
                 "GREENFIELD_server": {
-                    "url": "http://127.0.0.1:8000/mcp",
+                    "url": MCP_SERVER_URL,
                 }
             }
         }

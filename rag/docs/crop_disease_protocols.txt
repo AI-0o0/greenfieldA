@@ -1,0 +1,48 @@
+CROP DISEASE IDENTIFICATION AND TREATMENT PROTOCOLS
+Greenfield Agricultural Agency — Agronomy Division
+
+DOC_ID: CROP-PROTO-001
+Policy: Foliar Fungal Diseases of Corn (Leaf Blight Complex)
+Category: Disease Diagnosis & Treatment
+
+Rules & Guidelines:
+1. Identification: Gray-green water-soaked lesions developing into long elliptical
+   brown streaks with yellow halos on leaves indicate Corn Leaf Blight (fungal).
+   Yellow striping with scattered brown necrotic spots plus edge wilting indicates
+   early-stage fungal leaf spot complex.
+2. First-line treatment: Apply Neem Oil Extract as a low-hazard foliar spray at the
+   first appearance of lesions. Neem Oil Extract is approved for all zones without
+   senior sign-off.
+3. Second-line treatment: For established infections covering more than 30 percent
+   of leaf area, escalate to Chlorpyrifos-based fungicide application. Chlorpyrifos
+   is a controlled-hazard chemical and REQUIRES senior agronomist sign-off before
+   any dispatch.
+4. Application method: Use a high-clearance sprayer. Tractors alone must never be
+   dispatched for fungicide spraying jobs.
+5. Re-treatment window: Re-inspect the treated field after 7 days. If lesions have
+   stopped spreading, classify as improved. If leaf tissue is green again with no
+   active lesions, classify as recovered. If lesions continue spreading, classify
+   as worsened and restart diagnosis.
+
+DOC_ID: CROP-PROTO-002
+Policy: Contact Burndown and Weed Pressure in Row Crops
+Category: Chemical Application
+
+Rules & Guidelines:
+1. Identification: Uniform yellowing and wilting across weed competition zones with
+   stunted crop rows indicates weed pressure rather than fungal disease.
+2. Treatment: Systemic burndown with Glyphosate applied by sprayer. Glyphosate is a
+   RESTRICTED-hazard chemical and REQUIRES senior agronomist sign-off before dispatch.
+3. Buffer rule: Never apply Glyphosate within 15 meters of irrigation canals.
+
+DOC_ID: CROP-PROTO-003
+Policy: Nutrient Deficiency Correction
+Category: Soil & Foliar Nutrition
+
+Rules & Guidelines:
+1. Identification: Uniform pale-yellow striping along the whole leaf WITHOUT brown
+   necrotic spots indicates nitrogen deficiency, not disease.
+2. Treatment: Apply Foliar Fertilizer by sprayer. Foliar Fertilizer is low-hazard
+   and requires no sign-off.
+3. Follow-up: Re-inspect after 10 days; recovered color classifies the case as
+   recovered.

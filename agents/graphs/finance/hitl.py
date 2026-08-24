@@ -73,7 +73,7 @@ def create_or_update_hitl_task(
         if existing:
             conn.execute(
                 """UPDATE HITL_Tasks 
-                   SET reason = ?, assessed_amount = ?, dscr = ?, risk_level = ?, state_snapshot = ?
+                   SET node_name = 'admin_review', reason = ?, assessed_amount = ?, dscr = ?, risk_level = ?, state_snapshot = ?
                    WHERE task_id = ?""",
                 (reason, assessed_amount, dscr, risk_level, snap_json, existing["task_id"]),
             )

@@ -31,6 +31,16 @@ from agents.graphs.crop_disease.graph import (
     route_after_execute_treatment,
     route_after_evaluate_result,
 )
+from agents.graphs.crop_disease.runner import (
+    run_crop_turn,
+    resume_crop_interrupt,
+    resolve_crop_ticket_and_resume,
+    get_crop_agent,
+    ensure_case_row,
+    list_crop_hitl_tasks,
+    get_crop_hitl_task,
+    new_thread_id,
+)
 
 __all__ = [
     "CaseState",
@@ -54,4 +64,12 @@ __all__ = [
     "route_after_farmer_confirmation",
     "route_after_execute_treatment",
     "route_after_evaluate_result",
+    "run_crop_turn",
+    "resume_crop_interrupt",
+    "resolve_crop_ticket_and_resume",
+    "get_crop_agent",
+    "ensure_case_row",
+    "list_crop_hitl_tasks",
+    "get_crop_hitl_task",
+    "new_thread_id",
 ]

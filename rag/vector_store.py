@@ -34,7 +34,7 @@ def initialize_vector_db():
             file_path = os.path.join(docs_dir, file_name)
             with open(file_path, "r", encoding="utf-8") as f:
                 content = f.read()
-                
+
             # Basic Chunking by sections
             chunks = content.split("\n\n")
             for chunk in chunks:
@@ -53,6 +53,67 @@ def initialize_vector_db():
             ids=ids
         )
         print(f"[RAG Vector DB]: Initialized with {len(documents)} chunks.")
+
+
+# ==============================================================
+# Runtime document management (platform admin surface)
+#
+# These operate on the SAME live Chroma collection instance the
+# retrievers query, so an admin's add/remove is reflected in what
+# the Memory/RAG agent retrieves on its very next query — not just
+# written to storage and ignored.
+# ==============================================================
+
+def _chunk_text(text: str) -> list[str]:
+    return [c.strip() for c in text.split("\n\n") if c.strip()]
+
+
+def list_documents() -> list[dict]:
+    """Groups stored chunks by source document with chunk counts."""
+    got = collection.get(include=["metadatas"])
+    counts: dict[str, int] = {}
+    for meta in got.get("metadatas", []):
+        source = (meta or {}).get("source", "unknown")
+        counts[source] = counts.get(source, 0) + 1
+    return [
+        {"source": source, "chunks": n}
+        for source, n in sorted(counts.items())
+    ]
+
+
+def add_document(source_name: str, text: str) -> dict:
+    """
+    Ingests (or atomically replaces) one document into the live vector store.
+    Chunks on blank lines exactly like initialize_vector_db, embeds locally,
+    and upserts with deterministic per-source chunk ids so re-adding the same
+    source never duplicates.
+    """
+    chunks = _chunk_text(text)
+    if not chunks:
+        raise ValueError(f"Document '{source_name}' produced no usable chunks.")
+
+    # Replace-any-existing semantics: drop old chunks for this source first.
+    delete_document(source_name)
+
+    embeddings = [get_embedding(chunk) for chunk in chunks]
+    safe_source = "".join(c if c.isalnum() or c in "-_." else "_" for c in source_name)
+    collection.upsert(
+        documents=chunks,
+        embeddings=embeddings,
+        metadatas=[{"source": source_name, "chunk_id": i + 1} for i in range(len(chunks))],
+        ids=[f"doc::{safe_source}::chunk_{i}" for i in range(len(chunks))],
+    )
+    return {"source": source_name, "chunks_added": len(chunks)}
+
+
+def delete_document(source_name: str) -> int:
+    """Removes every chunk belonging to a source from the live vector store."""
+    got = collection.get(where={"source": source_name}, include=[])
+    ids = got.get("ids", [])
+    if ids:
+        collection.delete(ids=ids)
+    return len(ids)
+
 
 if __name__ == "__main__":
     initialize_vector_db()

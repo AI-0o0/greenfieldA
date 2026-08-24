@@ -19,6 +19,8 @@ from schemas.tool_inputs import (
     KnowledgeSearchInput,
     SignoffResponse,
     DISPATCH_SCHEMA,
+    ReportInput,
+    EmptyInput,
 )
 
 
@@ -115,6 +117,86 @@ async def batch_dispatch(input_data: BatchDispatchInput, ctx: Context) -> str:
 async def log_incident_note(input_data: IncidentInput, ctx: Context) -> str:
     """Log an unstructured incident note."""
     return f"SUCCESS: Incident recorded: {input_data.raw_note}"
+
+
+# ============================================================
+# MCP-wire-safe wrapper for dispatch_equipment
+#
+# SECURITY FIX (prior-lab fault): registering dispatch_equipment
+# directly exposed its trusted-server-side `pre_approved=True`
+# parameter on the public MCP input schema, meaning ANY external
+# client could send pre_approved=true over the wire and bypass the
+# mandatory restricted-chemical sign-off elicitation. Only this
+# wrapper is registered on the server; it never forwards a caller-
+# supplied approval flag. The real function remains an internal
+# Python API for state-graph nodes whose HITL gate already ran.
+# ============================================================
+
+async def dispatch_equipment_mcp(input_data: DispatchInput, ctx: Context) -> str:
+    """Dispatch a piece of equipment to perform a job on a specific field.
+
+    Restricted chemicals require interactive human sign-off via elicitation;
+    there is no way to pre-approve a dispatch through the MCP protocol."""
+    return await dispatch_equipment(input_data, ctx=ctx)
+
+
+async def generate_fleet_report(input_data: ReportInput, ctx: Context) -> str:
+    """Generate a monthly fleet utilization report and store it in Fleet_Reports."""
+    month = input_data.month
+    conn = get_db_connection()
+    try:
+        cursor = conn.cursor()
+        cursor.execute("SELECT status, COUNT(*) AS n FROM Equipment GROUP BY status")
+        fleet_counts = {r["status"]: r["n"] for r in cursor.fetchall()}
+
+        cursor.execute(
+            "SELECT job_type, COUNT(*) AS n FROM Dispatch_Jobs "
+            "WHERE strftime('%Y-%m', started_at) = ? GROUP BY job_type",
+            (month,),
+        )
+        job_counts = {r["job_type"]: r["n"] for r in cursor.fetchall()}
+        total_jobs = sum(job_counts.values())
+
+        cursor.execute(
+            """
+            INSERT INTO Fleet_Reports (month, status, progress, generated_by)
+            VALUES (?, 'completed', 100,
+                (SELECT technician_id FROM Technicians
+                 WHERE role = 'dispatcher' AND authenticated = 1
+                 ORDER BY technician_id LIMIT 1))
+            """
+        )
+        report_id = cursor.lastrowid
+        conn.commit()
+    finally:
+        conn.close()
+
+    lines = [f"Fleet Report {month} (report #{report_id}):"]
+    lines += [f"  Equipment {s}: {n}" for s, n in sorted(fleet_counts.items())]
+    lines.append(f"  Dispatch jobs in {month}: {total_jobs}")
+    lines += [f"    {j}: {n}" for j, n in sorted(job_counts.items())]
+    return "\n".join(lines)
+
+
+async def get_equipment_status(input_data: EmptyInput, ctx: Context) -> str:
+    """Snapshot every machine's current status (idle/dispatched/maintenance/offline) and location."""
+    conn = get_db_connection()
+    try:
+        rows = conn.execute(
+            "SELECT equipment_id, serial_number, equipment_type, status, current_location "
+            "FROM Equipment ORDER BY equipment_id"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    header = "equipment_id | serial | type | status | location"
+    lines = [header, "-" * len(header)]
+    lines += [
+        f"{r['equipment_id']} | {r['serial_number']} | {r['equipment_type']} | "
+        f"{r['status']} | {r['current_location']}"
+        for r in rows
+    ]
+    return "\n".join(lines)
 
 
 
