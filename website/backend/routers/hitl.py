@@ -182,9 +182,9 @@ async def resolve_task(kind: str, task_id: int, decision: HitlDecision):
             raise HTTPException(404, f"HITL task #{task_id} not found.")
 
         approved = decision.decision == "approve"
-        summary = await asyncio.to_thread(
-            resume_crop_interrupt,
-            runtime.crop_graph,
+        crop_graph = await runtime.get_crop_graph()
+        summary = await resume_crop_interrupt(
+            crop_graph,
             task["thread_id"],
             {"approved": approved, "notes": decision.notes},
         )

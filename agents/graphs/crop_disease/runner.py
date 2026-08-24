@@ -10,9 +10,15 @@ Concerns located here (rubric pointers):
 - Interrupt resume (HITL and
   farmer/observation pauses):   resume_crop_interrupt()  -> Command(resume=...)
 - Failure-ticket recovery:      resolve_crop_ticket_and_resume()
-  (LangGraph time-travel: update_state(as_node=...) + invoke(None), so the run
-  re-enters at the failed stage from its durable checkpoint instead of
+  (LangGraph time-travel: aupdate_state(as_node=...) + ainvoke(None), so the
+  run re-enters at the failed stage from its durable checkpoint instead of
   restarting from the top.)
+
+Everything in this file that touches the compiled graph is async, because
+the graph is checkpointed with AsyncSqliteSaver, which only exposes async
+methods (ainvoke, aget_state, aupdate_state). There is no sync fallback —
+every caller, all the way up to the FastAPI route handler, must await
+these functions.
 """
 
 from __future__ import annotations
@@ -37,7 +43,9 @@ def ensure_case_row(
     customer_id: int,
     field_id: int,
 ) -> int:
-    """Inserts the Crop_Cases row for a fresh thread if missing; returns case_id."""
+    """Inserts the Crop_Cases row for a fresh thread if missing; returns case_id.
+    Plain sync DB call — no graph interaction here, so this stays sync and
+    callers wrap it in asyncio.to_thread if calling from an async route."""
     conn = get_db_connection()
     try:
         conn.execute(
@@ -56,12 +64,14 @@ def ensure_case_row(
 
 # ==============================================================
 # Graph instance management (one durable-SQLite graph per process)
+# This is the single source of truth for the cached graph — runtime.py's
+# get_crop_graph() delegates here rather than keeping its own cache.
 # ==============================================================
 
 _GRAPH_CACHE: Dict[str, Any] = {}
 
 
-def get_crop_agent(db_path: Optional[str] = None, force_rebuild: bool = False):
+async def get_crop_agent(db_path: Optional[str] = None, force_rebuild: bool = False):
     """
     Returns the process-wide crop-disease graph backed by the durable SQLite
     checkpointer (db/farm.db by default). Because the checkpointer is durable,
@@ -72,15 +82,16 @@ def get_crop_agent(db_path: Optional[str] = None, force_rebuild: bool = False):
     if force_rebuild or key not in _GRAPH_CACHE:
         from agents.graphs.crop_disease.graph import build_crop_disease_graph
 
-        _GRAPH_CACHE[key] = build_crop_disease_graph(db_path=db_path)
+        _GRAPH_CACHE[key] = await build_crop_disease_graph(db_path=db_path)
     return _GRAPH_CACHE[key]
 
 
 # ==============================================================
-# Interrupt extraction helpers
+# Interrupt extraction helpers (now async: aget_state is the only
+# way to read a checkpoint on an AsyncSqliteSaver-backed graph)
 # ==============================================================
 
-def _extract_interrupt(graph: Any, config: dict, result: Any) -> Optional[dict]:
+async def _extract_interrupt(graph: Any, config: dict, result: Any) -> Optional[dict]:
     """Pulls the pending interrupt payload out of an invoke result / state."""
     intr = None
     if isinstance(result, dict):
@@ -89,7 +100,7 @@ def _extract_interrupt(graph: Any, config: dict, result: Any) -> Optional[dict]:
             first = pending[0] if isinstance(pending, (list, tuple)) else pending
             intr = getattr(first, "value", first)
     if intr is None:
-        snap = graph.get_state(config)
+        snap = await graph.aget_state(config)
         for task in getattr(snap, "tasks", None) or []:
             for i in getattr(task, "interrupts", None) or ():
                 intr = getattr(i, "value", i)
@@ -99,15 +110,15 @@ def _extract_interrupt(graph: Any, config: dict, result: Any) -> Optional[dict]:
     return intr
 
 
-def get_pending_interrupt(graph: Any, config: dict) -> Optional[dict]:
+async def get_pending_interrupt(graph: Any, config: dict) -> Optional[dict]:
     """Returns the payload of the interrupt this thread is parked on, if any."""
-    return _extract_interrupt(graph, config, None)
+    return await _extract_interrupt(graph, config, None)
 
 
-def summarize_turn(graph: Any, config: dict, result: Any) -> dict:
+async def summarize_turn(graph: Any, config: dict, result: Any) -> dict:
     """Uniform turn summary consumed by the platform's chat/HITL surfaces."""
     values = dict(result) if isinstance(result, dict) else {}
-    interrupt_payload = _extract_interrupt(graph, config, result)
+    interrupt_payload = await _extract_interrupt(graph, config, result)
 
     # A HITL pause is only surfaced as "awaiting admin" while its task row
     # is still pending; farmer/observation waits are external replies.
@@ -128,23 +139,7 @@ def summarize_turn(graph: Any, config: dict, result: Any) -> dict:
 # Turn entry point
 # ==============================================================
 
-def _invoke_graph(graph: Any, payload: Any, config: dict) -> Any:
-    import asyncio
-    import concurrent.futures
-
-    try:
-        loop = asyncio.get_running_loop()
-    except RuntimeError:
-        loop = None
-
-    if loop and loop.is_running():
-        with concurrent.futures.ThreadPoolExecutor() as pool:
-            return pool.submit(asyncio.run, graph.ainvoke(payload, config=config)).result()
-    else:
-        return asyncio.run(graph.ainvoke(payload, config=config))
-
-
-def run_crop_turn(
+async def run_crop_turn(
     graph: Any,
     thread_id: str,
     report: str,
@@ -167,11 +162,11 @@ def run_crop_turn(
         "retry_count": 0,
         "messages": [HumanMessage(content=report)],
     }
-    result = _invoke_graph(graph, input_payload, config=config)
-    return summarize_turn(graph, config, result)
+    result = await graph.ainvoke(input_payload, config=config)
+    return await summarize_turn(graph, config, result)
 
 
-def resume_crop_interrupt(
+async def resume_crop_interrupt(
     graph: Any,
     thread_id: str,
     resume_payload: Dict[str, Any],
@@ -185,8 +180,8 @@ def resume_crop_interrupt(
       await_observation:        {"outcome": recovered|improved|worsened, "notes": str}
     """
     config = {"configurable": {"thread_id": thread_id}}
-    result = _invoke_graph(graph, Command(resume=resume_payload), config=config)
-    return summarize_turn(graph, config, result)
+    result = await graph.ainvoke(Command(resume=resume_payload), config=config)
+    return await summarize_turn(graph, config, result)
 
 
 # ==============================================================
@@ -200,7 +195,7 @@ def _strip_error_markers(field: Optional[dict]) -> Optional[dict]:
     return cleaned
 
 
-def resolve_crop_ticket_and_resume(
+async def resolve_crop_ticket_and_resume(
     ticket_id: int,
     resolution_notes: str = "",
     graph: Any = None,
@@ -210,8 +205,8 @@ def resolve_crop_ticket_and_resume(
     """
     Resolves an open failure ticket and resumes the run from its durable
     checkpoint. LangGraph time-travel positions the graph as if the failed
-    stage just completed (update_state with as_node), so completed nodes are
-    NOT re-executed — then invoke(None) follows the graph edges onward.
+    stage just completed (aupdate_state with as_node), so completed nodes are
+    NOT re-executed — then ainvoke(None) follows the graph edges onward.
 
     Re-entry mapping:
       diagnose                                -> re-routes into diagnose (retry budget reset)
@@ -246,7 +241,7 @@ def resolve_crop_ticket_and_resume(
         conn.close()
 
     if graph is None:
-        graph = get_crop_agent(db_path=db_path)
+        graph = await get_crop_agent(db_path=db_path)
     config = {"configurable": {"thread_id": ticket["thread_id"]}}
 
     error_marker = ""
@@ -284,13 +279,10 @@ def resolve_crop_ticket_and_resume(
         patch.update(state_patch)
     patch = {k: v for k, v in patch.items() if v is not None}
 
-    if patch:
-        graph.update_state(config, patch, as_node=as_node)
-    else:
-        graph.update_state(config, {}, as_node=as_node)
+    await graph.aupdate_state(config, patch, as_node=as_node)
 
-    result = graph.invoke(None, config=config)
-    summary = summarize_turn(graph, config, result)
+    result = await graph.ainvoke(None, config=config)
+    summary = await summarize_turn(graph, config, result)
     summary["resolved_ticket_id"] = ticket_id
     summary["resumed_from_node"] = as_node
     return summary
@@ -298,6 +290,8 @@ def resolve_crop_ticket_and_resume(
 
 # ==============================================================
 # Crop_HITL_Tasks helpers used by the platform's unified HITL inbox
+# These remain plain sync DB calls — no graph interaction, so no
+# async needed. Routers wrap them in asyncio.to_thread as before.
 # ==============================================================
 
 def list_crop_hitl_tasks(status: Optional[str] = None) -> list[dict]:

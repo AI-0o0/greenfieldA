@@ -4,7 +4,7 @@ import os
 from typing import Optional, Any
 
 from langgraph.graph import StateGraph, START, END
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langchain_core.language_models.chat_models import BaseChatModel
 
 from .state import CaseState
@@ -80,7 +80,7 @@ def route_after_evaluate_result(state: CaseState) -> str:
 # Graph assembly
 # ==============================================================
 
-def build_crop_disease_graph(
+async def build_crop_disease_graph(
     llm: Optional[BaseChatModel] = None,
     checkpointer: Optional[Any] = None,
     db_path: Optional[str] = None,
@@ -182,18 +182,15 @@ def build_crop_disease_graph(
     if checkpointer is not None:
         cp = checkpointer
     else:
-        # NOTE: own the sqlite3 connection explicitly instead of
-        # `SqliteSaver.from_conn_string(...).__enter__()`. The context manager
-        # object would be garbage-collected as soon as this function returns,
-        # which finalizes the suspended generator and silently CLOSES the
-        # database mid-process. Same pattern as finance/checkpointer.py.
-        import sqlite3
+        import aiosqlite
 
         db_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..", "db"))
         os.makedirs(db_dir, exist_ok=True)
         target_db_path = db_path or os.environ.get("GREENFIELD_DB_PATH") or os.path.join(db_dir, "farm.db")
-        conn = sqlite3.connect(target_db_path, check_same_thread=False)
-        cp = SqliteSaver(conn)
+        
+        # استخدمنا await aiosqlite عشان يشتغل مع الـ Async
+        conn = await aiosqlite.connect(target_db_path)
+        cp = AsyncSqliteSaver(conn)
 
     graph = builder.compile(checkpointer=cp)
     return graph

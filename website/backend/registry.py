@@ -305,17 +305,18 @@ def _crop_pause_reply(interrupt_payload: dict) -> str:
     return "The case is waiting for an external reply."
 
 
-def crop_chat(thread_id: str, message: str) -> dict:
+async def crop_chat(thread_id: str, message: str) -> dict:
     from agents.graphs.crop_disease.runner import (
         run_crop_turn,
         resume_crop_interrupt,
         get_pending_interrupt,
     )
 
-    graph = runtime.crop_graph
+    # graph = runtime.crop_graph
+    graph = await runtime.get_crop_graph()
     config = {"configurable": {"thread_id": thread_id}}
 
-    pending = get_pending_interrupt(graph, config)
+    pending = await get_pending_interrupt(graph, config)
 
     if pending is not None:
         reason = pending.get("reason")
@@ -339,7 +340,7 @@ def crop_chat(thread_id: str, message: str) -> dict:
                 interrupt=pending,
             )
         if reason == "farmer_confirmation_required":
-            summary = resume_crop_interrupt(
+            summary = await resume_crop_interrupt(
                 graph, thread_id, {"confirmed": not _is_negative(message)}
             )
         elif reason == "treatment_observation_required":
@@ -349,11 +350,11 @@ def crop_chat(thread_id: str, message: str) -> dict:
                 return _base_result(_crop_pause_reply(pending), paused=True,
                                     paused_at="awaiting_observation",
                                     pause_kind="external", interrupt=pending)
-            summary = resume_crop_interrupt(graph, thread_id, {"outcome": outcome})
+            summary = await resume_crop_interrupt(graph, thread_id, {"outcome": outcome})
         else:
             summary = None
         if summary is None:
-            summary = run_crop_turn(graph, thread_id, report=message, customer_id=1, field_id=1)
+            summary = await run_crop_turn(graph, thread_id, report=message, customer_id=1, field_id=1)
     else:
         # Check if the message is a casual greeting or non-symptom query
         lowered = message.lower().strip()
@@ -369,7 +370,7 @@ def crop_chat(thread_id: str, message: str) -> dict:
                 "the field ID, and I will analyze the symptoms with RAG and propose a targeted treatment plan.",
                 trace=["crop_greeting"],
             )
-        summary = run_crop_turn(graph, thread_id, report=message, customer_id=1, field_id=1)
+        summary = await run_crop_turn(graph, thread_id, report=message, customer_id=1, field_id=1)
 
     values = summary.get("values") or {}
     status = values.get("status")
@@ -654,7 +655,7 @@ async def orchestrator_chat(thread_id: str, message: str) -> dict:
             res["handoff_history"] = handoff_history + (res.get("handoff_history") or [])
         return res
     elif active == "crop_disease":
-        res = await asyncio.to_thread(crop_chat, thread_id, message)
+        res = await crop_chat(thread_id, message)
         res["active_agent"] = "Crop Disease Clinic"
         if handoff_history:
             res["handoff_history"] = handoff_history + (res.get("handoff_history") or [])
@@ -681,7 +682,7 @@ async def dispatch_chat(agent_id: str, thread_id: str, message: str) -> dict:
     if agent_id == "orchestrator":
         result = await orchestrator_chat(thread_id, message)
     elif agent_id == "crop_disease":
-        result = await asyncio.to_thread(crop_chat, thread_id, message)
+        result = await crop_chat(thread_id, message)
     elif agent_id == "maintenance":
         result = await asyncio.to_thread(maintenance_chat, thread_id, message)
     elif agent_id == "finance":

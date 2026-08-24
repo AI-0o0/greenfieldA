@@ -1,7 +1,8 @@
 import os
 
-MODEL_NAME = "ministral-3b-2512"
-MODEL_PROVIDER = "mistralai"
+# MODEL_NAME = "llama-3.3-70b-versatile"
+MODEL_NAME = "openai/gpt-oss-20b"
+MODEL_PROVIDER = "groq"
 
 # ------------------------------------------------------------
 # MCP server location (single source of truth).
